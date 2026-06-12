@@ -26,10 +26,10 @@ export const ValidationResultPage: React.FC = () => {
         <div className="text-center">
           <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-slate-900 mb-2">
-            No Photo to Validate
+            Tidak ada foto untuk verifikasi.
           </h2>
           <p className="text-slate-600 mb-6">
-            Please capture a photo first.
+            Mohon ambil foto terlebih dahulu.
           </p>
           <Button onClick={() => navigate('/')}>
             Go to Home
@@ -132,7 +132,7 @@ export const ValidationResultPage: React.FC = () => {
 
           <div className="mt-4">
             <h3 className="text-lg font-semibold text-slate-900 mb-3">
-              Validation Details
+              Detail Validasi
             </h3>
             <div className="space-y-2">
               {validation.rules.map((rule) => (
@@ -153,7 +153,7 @@ export const ValidationResultPage: React.FC = () => {
               fullWidth
               icon={<RotateCcw className="w-4 h-4" />}
             >
-              Retake Photo
+              Ambil Ulang Foto
             </Button>
 
             {validation.passed && (
@@ -172,7 +172,7 @@ export const ValidationResultPage: React.FC = () => {
           {!validation.passed && (
             <div className="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-200">
               <p className="text-sm text-amber-800">
-                <strong>Note:</strong> Photo validation failed. Please retake the photo maintaining all requirements for the best results.
+                <strong>Catatan:</strong> Validasi foto gagal. Mohon ambil foto ulang dengan memenuhi semua persyaratan untuk hasil terbaik.
               </p>
             </div>
           )}

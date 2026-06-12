@@ -162,9 +162,10 @@ export const CameraCapturePage: React.FC = () => {
       <div className="min-h-screen bg-black flex items-center justify-center p-4">
         <div className="text-center text-white">
           <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
-          <p className="text-lg">Invalid category</p>
+          <p className="text-lg">
+Kategori tidak valid</p>
           <Button className="mt-4" onClick={() => navigate('/')}>
-            Go Back
+            Kembali
           </Button>
         </div>
       </div>
@@ -181,7 +182,7 @@ export const CameraCapturePage: React.FC = () => {
             <div className="absolute inset-0 flex items-center justify-center z-10">
               <div className="text-center">
                 <div className="w-12 h-12 border-4 border-slate-600 border-t-teal-500 rounded-full animate-spin mb-4" />
-                <p className="text-slate-400">Initializing camera...</p>
+                <p className="text-slate-400">Menginisialisasi kamera...</p>
               </div>
             </div>
           )}
@@ -192,7 +193,7 @@ export const CameraCapturePage: React.FC = () => {
                 <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
                 <p className="text-white mb-4">{error}</p>
                 <div className="flex gap-3 justify-center">
-                  <Button onClick={() => startCamera()}>Retry Camera</Button>
+                  <Button onClick={() => startCamera()}>Coba lagi Kamera</Button>
                   <Button
                     variant="outline"
                     onClick={() => fileInputRef.current?.click()}
@@ -236,7 +237,7 @@ export const CameraCapturePage: React.FC = () => {
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                   <div className="text-center">
                     <div className="w-12 h-12 border-4 border-slate-600 border-t-teal-500 rounded-full animate-spin mb-4" />
-                    <p className="text-white">Validating...</p>
+                    <p className="text-white">Memvalidasi...</p>
                   </div>
                 </div>
               )}
@@ -298,7 +299,7 @@ export const CameraCapturePage: React.FC = () => {
                 fullWidth
                 className="bg-transparent border-white/30 text-white hover:bg-white/10"
               >
-                Retake
+                Foto Ulang
               </Button>
             </div>
           )}
@@ -308,7 +309,7 @@ export const CameraCapturePage: React.FC = () => {
       <canvas ref={canvasRef} className="hidden" />
 
       <div className="text-center text-xs text-slate-500 pb-4 bg-slate-900">
-        {category.rules.length} validation rules
+        {category.rules.length} aturan validasi
       </div>
     </div>
   );

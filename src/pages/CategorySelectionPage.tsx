@@ -81,14 +81,17 @@ export const CategorySelectionPage: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white pb-24">
       <div className="max-w-lg mx-auto px-4 py-8">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
-            <Camera className="w-8 h-8 text-white" />
+          <div className="flex justify-center mb-4">
+        <img
+        src={`${import.meta.env.BASE_URL}seanantaapps.png`}
+        alt="SEANANTAAPPS"
+        className="w-24 h-24 object-contain"
+        />
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mb-2">
-            Photo Validation
           </h1>
           <p className="text-slate-600">
-            Select a category to validate your photo against specific requirements
+            Pilih kategori untuk memvalidasi foto Anda terhadap persyaratan tertentu
           </p>
         </div>
 
@@ -104,7 +107,7 @@ export const CategorySelectionPage: React.FC = () => {
 
         <div className="mt-6 p-4 rounded-xl bg-blue-50 border border-blue-100">
           <p className="text-sm text-blue-700">
-            <strong>Offline capable:</strong> This app works offline. Your photos and validations are stored locally on your device.
+            <strong>Offline capable:</strong> Aplikasi ini berfungsi secara offline. Foto dan validasi Anda disimpan secara lokal di perangkat Anda.
           </p>
         </div>
       </div>

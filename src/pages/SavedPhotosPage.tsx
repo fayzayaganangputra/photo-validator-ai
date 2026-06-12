@@ -69,7 +69,7 @@ export const SavedPhotosPage: React.FC = () => {
         {loading ? (
           <div className="text-center py-12">
             <div className="w-12 h-12 border-4 border-slate-200 border-t-teal-500 rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-slate-500">Loading photos...</p>
+            <p className="text-slate-500">Memuat foto...</p>
           </div>
         ) : photos.length === 0 ? (
           <div className="text-center py-16">
@@ -77,13 +77,13 @@ export const SavedPhotosPage: React.FC = () => {
               <Image className="w-10 h-10 text-slate-400" />
             </div>
             <h3 className="text-xl font-semibold text-slate-900 mb-2">
-              No Photos Saved
+              Tidak Ada Foto yang Disimpan
             </h3>
             <p className="text-slate-500 mb-6 max-w-sm mx-auto">
-              Photos you validate and save will appear here. They're stored locally on your device.
+              Foto yang Anda validasi dan simpan akan muncul di sini. Foto-foto tersebut tersimpan secara lokal di perangkat Anda.
             </p>
             <Button onClick={() => navigate('/')}>
-              Capture a Photo
+              Ambil Foto
             </Button>
           </div>
         ) : (
@@ -213,14 +213,14 @@ export const SavedPhotosPage: React.FC = () => {
                 fullWidth
                 icon={<Trash2 className="w-4 h-4" />}
               >
-                Delete
+                Hapus
               </Button>
               <Button
                 variant="outline"
                 onClick={() => setSelectedPhoto(null)}
                 fullWidth
               >
-                Close
+                Tutup
               </Button>
             </div>
           </div>

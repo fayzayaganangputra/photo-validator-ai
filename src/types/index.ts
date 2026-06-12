@@ -36,49 +36,49 @@ export interface CategoryConfig {
 export const CATEGORIES: CategoryConfig[] = [
   {
     id: 'person-product',
-    name: 'Person + Product',
-    description: 'Photo of person with product',
+    name: 'Orang + Barang',
+    description: 'Foto orang dengan barang',
     icon: 'User',
     rules: [
-      'Person must be detected',
-      'Product must be fully visible',
-      'Product must not be covered by person',
-      'Product must be centered',
-      'Image must not be blurry'
+      'Orang harus terdeteksi',
+      'Produk harus terlihat sepenuhnya.',
+      'Produk tidak boleh tertutup oleh seseorang.',
+      'Produk harus berada di tengah.',
+      'Gambar tidak boleh buram.'
     ]
   },
   {
     id: 'signboard',
-    name: 'Signboard',
-    description: 'Photo of signboard or signage',
+    name: 'Papan Nama',
+    description: 'Foto papan nama atau rambu',
     icon: 'Signpost',
     rules: [
-      'Signboard must be centered',
-      'Image must not be blurry'
+      'Papan nama harus berada di tengah.',
+      'Gambar tidak boleh buram.'
     ]
   },
   {
     id: 'serial-number',
-    name: 'Product Serial Number',
-    description: 'Photo of product serial number',
+    name: 'Nomor Seri',
+    description: 'Foto nomor seri produk',
     icon: 'Hash',
     rules: [
-      'Text must be readable',
-      'Image must not be blurry',
-      'Text must be centered',
-      'Text must not be cropped'
+      'Teks harus mudah dibaca.',
+      'Gambar tidak boleh buram.',
+      'Teks harus berada di tengah.',
+      'Teks tidak boleh terpotong'
     ]
   },
   {
     id: 'bast-document',
-    name: 'BAST Document',
-    description: 'Photo of BAST document',
+    name: 'BAST Dokumen',
+    description: 'Foto dokumen BAST',
     icon: 'FileText',
     rules: [
-      'Document must be centered',
-      'Text must be readable',
-      'Image must not be blurry',
-      'Stamp may cover max 20% of text area'
+      'Dokumen harus berada di tengah.',
+      'Teks harus mudah dibaca.',
+      'Gambar tidak boleh buram.',
+      'Stempel dapat menutupi maksimal 20% area teks.'
     ]
   }
 ];
