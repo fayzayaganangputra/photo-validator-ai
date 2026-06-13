@@ -83,8 +83,8 @@ export const CategorySelectionPage: React.FC = () => {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
         <img
-        src={`${import.meta.env.BASE_URL}seanantaapps.png`}
-        alt="SEANANTAAPPS"
+        src={`${import.meta.env.BASE_URL}seanantha.jfif`}
+        alt="SEANANTHA"
         className="w-24 h-24 object-contain"
         />
           </div>

@@ -709,12 +709,55 @@ function addRule(
   });
 }
 
+// function buildResult(rules: ValidationRule[], category: PhotoCategory): ValidationResult {
+//   const totalScore = rules.reduce((sum, r) => sum + r.score, 0) / rules.length;
+
+//   return {
+//     overallScore: Math.round(totalScore),
+//     passed: rules.every((r) => r.passed),
+//     rules,
+//     timestamp: new Date(),
+//     category
+//   };
+// }
+
 function buildResult(rules: ValidationRule[], category: PhotoCategory): ValidationResult {
   const totalScore = rules.reduce((sum, r) => sum + r.score, 0) / rules.length;
+  const overallScore = Math.round(totalScore);
+
+  const requiredRuleIds: Record<PhotoCategory, string[]> = {
+    'person-product': [
+      'person-detected',
+      'product-detected',
+      'product-not-covered'
+    ],
+
+    'signboard': [
+      'signboard-text-readable',
+      'signboard-centered'
+    ],
+
+    'serial-number': [
+      'ocr-readable',
+      'text-centered'
+    ],
+
+    'bast-document': [
+      'text-readable',
+      'document-centered',
+      'document-not-cropped',
+      'stamp-coverage'
+    ]
+  };
+
+  const requiredPassed = requiredRuleIds[category].every((id) => {
+    const rule = rules.find((r) => r.id === id);
+    return rule ? rule.passed : false;
+  });
 
   return {
-    overallScore: Math.round(totalScore),
-    passed: rules.every((r) => r.passed),
+    overallScore,
+    passed: requiredPassed && overallScore >= 70,
     rules,
     timestamp: new Date(),
     category

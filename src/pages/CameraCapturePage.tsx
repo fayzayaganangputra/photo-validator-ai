@@ -208,12 +208,20 @@ Kategori tidak valid</p>
 
           {!capturedImage ? (
             <>
-              <video
+              {/* <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
                 className="w-full h-full object-cover"
+                style={{ opacity: isLoading ? 0 : 1 }}
+              /> */}
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-contain bg-black"
                 style={{ opacity: isLoading ? 0 : 1 }}
               />
 
@@ -222,7 +230,8 @@ Kategori tidak valid</p>
               </div>
 
               <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute inset-0 flex items-center justify-center">
+                {/* <div className="absolute inset-0 flex items-center justify-center"> */}
+                <div className="w-[85%] h-[70%] border-2 border-white/50 rounded-2xl flex items-center justify-center">
                   <div className="w-3/4 h-3/4 border-2 border-white/30 rounded-2xl flex items-center justify-center">
                     <Focus className="w-8 h-8 text-white/30" />
                   </div>
