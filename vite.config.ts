@@ -9,7 +9,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: [
-        'seanantha.jfif'
+        'seanantha.png',
       ],
       manifest: {
         name: 'SEANANTHA',
@@ -22,14 +22,14 @@ export default defineConfig({
         scope: '/',
         icons: [
           {
-            src: '/seanantha.jfif',
+            src: '/seanantha.png',
             sizes: '192x192',
-            type: 'image/jfif'
+            type: 'image/png'
           },
           {
-            src: '/seanantha.jfif',
+            src: '/seanantha.png',
             sizes: '512x512',
-            type: 'image/jfif'
+            type: 'image/png'
           }
         ]
       },
