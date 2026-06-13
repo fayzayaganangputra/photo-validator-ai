@@ -213,7 +213,7 @@ export const CameraCapturePage: React.FC = () => {
                 autoPlay
                 playsInline
                 muted
-                className="absolute inset-0 w-full h-full object-contain bg-black"
+                className="absolute inset-0 w-full h-full object-cover bg-black"
                 style={{ opacity: isLoading ? 0 : 1 }}
               />
 
