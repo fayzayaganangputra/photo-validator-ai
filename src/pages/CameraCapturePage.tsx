@@ -32,6 +32,7 @@ export const CameraCapturePage: React.FC = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
     }
+
     streamRef.current = null;
     setStream(null);
   };
@@ -62,7 +63,7 @@ export const CameraCapturePage: React.FC = () => {
       }
     } catch (err) {
       console.error('Camera error:', err);
-      setError('Unable to access camera. Please grant camera permissions or use Upload Test on laptop.');
+      setError('Kamera tidak dapat diakses. Izinkan akses kamera atau gunakan Upload Test.');
     } finally {
       setIsLoading(false);
     }
@@ -95,7 +96,7 @@ export const CameraCapturePage: React.FC = () => {
       });
     } catch (err) {
       console.error('Validation error:', err);
-      setError('Failed to validate image. Please try again.');
+      setError('Gagal memvalidasi gambar. Silakan coba lagi.');
     } finally {
       setIsValidating(false);
     }
@@ -115,7 +116,7 @@ export const CameraCapturePage: React.FC = () => {
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const imageData = canvas.toDataURL('image/jpeg', 0.8);
+    const imageData = canvas.toDataURL('image/jpeg', 0.85);
     setCapturedImage(imageData);
 
     await validateAndNavigate(imageData);
@@ -162,8 +163,7 @@ export const CameraCapturePage: React.FC = () => {
       <div className="min-h-screen bg-black flex items-center justify-center p-4">
         <div className="text-center text-white">
           <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
-          <p className="text-lg">
-Kategori tidak valid</p>
+          <p className="text-lg">Kategori tidak valid</p>
           <Button className="mt-4" onClick={() => navigate('/')}>
             Kembali
           </Button>
@@ -174,12 +174,12 @@ Kategori tidak valid</p>
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
-      <Header title={category.name} showBack className="bg-black border-transparent" />
+      <Header title={category.name} showBack className="bg-white border-slate-200" />
 
-      <div className="flex-1 relative flex flex-col">
-        <div className="flex-1 relative bg-slate-900">
+      <div className="flex-1 relative flex flex-col bg-black">
+        <div className="flex-1 relative bg-black overflow-hidden">
           {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center z-10">
+            <div className="absolute inset-0 flex items-center justify-center z-10 bg-black">
               <div className="text-center">
                 <div className="w-12 h-12 border-4 border-slate-600 border-t-teal-500 rounded-full animate-spin mb-4" />
                 <p className="text-slate-400">Menginisialisasi kamera...</p>
@@ -188,12 +188,12 @@ Kategori tidak valid</p>
           )}
 
           {error && (
-            <div className="absolute inset-0 flex items-center justify-center z-20 p-4">
+            <div className="absolute inset-0 flex items-center justify-center z-30 p-4 bg-black/80">
               <div className="text-center bg-slate-800 rounded-2xl p-6 max-w-sm">
                 <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
                 <p className="text-white mb-4">{error}</p>
                 <div className="flex gap-3 justify-center">
-                  <Button onClick={() => startCamera()}>Coba lagi Kamera</Button>
+                  <Button onClick={() => startCamera()}>Coba Lagi</Button>
                   <Button
                     variant="outline"
                     onClick={() => fileInputRef.current?.click()}
@@ -208,42 +208,54 @@ Kategori tidak valid</p>
 
           {!capturedImage ? (
             <>
-              {/* <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-                style={{ opacity: isLoading ? 0 : 1 }}
-              /> */}
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-contain bg-black"
+                className="absolute inset-0 w-full h-full object-contain bg-black"
                 style={{ opacity: isLoading ? 0 : 1 }}
               />
 
-              <div className="absolute top-4 left-4 right-4 flex justify-between items-start pointer-events-none">
+              <div className="absolute top-4 left-4 right-4 z-20 flex justify-between items-start pointer-events-none">
                 <Badge variant="info">{category.name}</Badge>
               </div>
 
-              <div className="absolute inset-0 pointer-events-none">
-                {/* <div className="absolute inset-0 flex items-center justify-center"> */}
-                <div className="w-[85%] h-[70%] border-2 border-white/50 rounded-2xl flex items-center justify-center">
-                  <div className="w-3/4 h-3/4 border-2 border-white/30 rounded-2xl flex items-center justify-center">
-                    <Focus className="w-8 h-8 text-white/30" />
-                  </div>
+              <div className="absolute inset-0 z-10 pointer-events-none">
+                <div
+                  className="absolute"
+                  style={{
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '86%',
+                    height: '70%'
+                  }}
+                >
+                  <div className="absolute inset-0 border-2 border-white/60 rounded-3xl" />
+
+                  <div className="absolute top-0 bottom-0 left-1/3 w-px bg-white/30" />
+                  <div className="absolute top-0 bottom-0 left-2/3 w-px bg-white/30" />
+                  <div className="absolute left-0 right-0 top-1/3 h-px bg-white/30" />
+                  <div className="absolute left-0 right-0 top-2/3 h-px bg-white/30" />
+
+                  <Focus
+                    className="w-8 h-8 text-white/40 absolute"
+                    style={{
+                      left: '50%',
+                      top: '50%',
+                      transform: 'translate(-50%, -50%)'
+                    }}
+                  />
                 </div>
               </div>
             </>
           ) : (
-            <div className="relative w-full h-full">
+            <div className="relative w-full h-full bg-black">
               <img src={capturedImage} alt="Captured" className="w-full h-full object-contain" />
 
               {isValidating && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                   <div className="text-center">
                     <div className="w-12 h-12 border-4 border-slate-600 border-t-teal-500 rounded-full animate-spin mb-4" />
                     <p className="text-white">Memvalidasi...</p>
