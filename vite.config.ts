@@ -10,6 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: [
         'seanantha.png',
+        'seanantha192.png',
+        'seanantha512.png'
       ],
       manifest: {
         name: 'SEANANTHA',
@@ -22,12 +24,12 @@ export default defineConfig({
         scope: '/',
         icons: [
           {
-            src: '/seanantha.png',
+            src: '/seanantha192.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: '/seanantha.png',
+            src: '/seanantha512.png',
             sizes: '512x512',
             type: 'image/png'
           }
