@@ -88,7 +88,7 @@ export const ValidationResultPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
-      <Header title="Validation Result" showBack />
+      <Header title="Hasil Validasi" showBack />
 
       <div className="max-w-lg mx-auto">
         <div className="relative">
@@ -121,12 +121,12 @@ export const ValidationResultPage: React.FC = () => {
                   )}
                   <div>
                     <h2 className={`text-xl font-bold ${getScoreColor(validation.overallScore)}`}>
-                      {validation.passed ? 'PASSED' : 'FAILED'}
+                      {validation.passed ? 'Valid' : 'Tidak Valid'}
                     </h2>
                     <p className="text-slate-600">
                       {validation.passed
-                        ? 'Photo meets all requirements'
-                        : 'Some requirements not met'}
+                        ? 'Foto memenuhi semua persyaratan'
+                        : 'Beberapa persyaratan tidak terpenuhi'}
                     </p>
                   </div>
                 </div>

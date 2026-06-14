@@ -98,28 +98,28 @@ async function validatePersonProduct(analysis: ImageAnalysis): Promise<Validatio
   addRule(
     rules,
     'not-blurry',
-    'Image Not Blurry',
-    'Image must be sharp and clear',
+    'Gambar Tidak Buram',
+    'Gambar harus tajam dan jelas.',
     analysis.blurScore >= 35,
     Math.min(100, analysis.blurScore * 2.5),
-    `Blur score: ${analysis.blurScore.toFixed(1)}. Minimum recommended: 35.`
+    `Skor Buram: ${analysis.blurScore.toFixed(1)}. Jumlah minimum yang direkomendasikan: 35.`
   );
 
   addRule(
     rules,
     'main-object-detected',
-    'Main Object Detected',
-    'Main subject must be visible',
+    'Objek Utama Terdeteksi',
+    'Subjek utama harus terlihat.',
     !!analysis.mainBox,
     analysis.mainBox ? 90 : 20,
-    analysis.mainBox ? 'Main visual area detected.' : 'Main subject area is not clear.'
+    analysis.mainBox ? 'Area visual utama terdeteksi.' : 'Bidang studi utama tidak jelas.'
   );
 
   addRule(
     rules,
     'object-centered',
-    'Object Centered',
-    'Product should be in center area',
+    'Produk berada di tengah',
+    'Produk harus berada di area tengah.',
     analysis.centerScore >= 70,
     analysis.centerScore,
     `Centering score: ${analysis.centerScore}/100.`
@@ -128,11 +128,11 @@ async function validatePersonProduct(analysis: ImageAnalysis): Promise<Validatio
   addRule(
     rules,
     'object-not-cropped',
-    'Product Fully Visible',
-    'Product must not be cropped at the edge',
+    'Produk Terlihat Sepenuhnya',
+    'Produk tidak boleh dipotong di bagian tepinya.',
     !analysis.cropped,
     analysis.cropped ? 45 : 95,
-    analysis.cropped ? 'Object is too close to image border.' : 'Object does not touch image border.'
+    analysis.cropped ? 'Objek terlalu dekat dengan batas gambar.' : 'Objek tidak menyentuh batas gambar.'
   );
 
   try {
@@ -143,23 +143,23 @@ async function validatePersonProduct(analysis: ImageAnalysis): Promise<Validatio
     addRule(
       rules,
       'person-detected',
-      'Person Detected',
-      'Person must be visible in image',
+      'Orang Terdeteksi',
+      'Orang harus terlihat dalam gambar.',
       persons.length > 0,
       persons.length > 0 ? 100 : 30,
-      persons.length > 0 ? `${persons.length} person(s) detected.` : 'No person detected by AI model.'
+      persons.length > 0 ? `${persons.length} orang terdeteksi.` : 'Tidak ada orang yang terdeteksi oleh model AI.'
     );
 
     addRule(
       rules,
       'product-detected',
-      'Product/Object Detected',
-      'Product or object must be visible',
+      'Produk/Objek Terdeteksi',
+      'Produk atau objek harus terlihat.',
       products.length > 0,
       products.length > 0 ? 90 : 35,
       products.length > 0
-        ? `Object detected: ${products.slice(0, 3).map((p: any) => p.class).join(', ')}.`
-        : 'No non-person object detected.'
+        ? `Objek terdeteksi: ${products.slice(0, 3).map((p: any) => p.class).join(', ')}.`
+        : 'Tidak ada objek non-manusia yang terdeteksi.'
     );
 
     if (persons.length > 0 && products.length > 0) {
@@ -169,11 +169,11 @@ async function validatePersonProduct(analysis: ImageAnalysis): Promise<Validatio
       addRule(
         rules,
         'product-not-covered',
-        'Product Not Covered by Person',
-        'Person must not cover the product',
+        'Produk boleh tertutup orang',
+        'Orang tidak boleh menutupi produk .',
         maxOverlap <= 25,
         Math.max(0, 100 - maxOverlap * 3),
-        `Estimated person-product overlap: ${maxOverlap.toFixed(1)}%. Maximum allowed: 25%.`
+        `Perkiraan tumpang tindih antara individu dan produk: ${maxOverlap.toFixed(1)}%. Maksimum yang diperbolehkan: 25%.`
       );
 
       const aiCenterScore = bboxCenterScore(productBox, analysis.width, analysis.height);
@@ -181,11 +181,11 @@ async function validatePersonProduct(analysis: ImageAnalysis): Promise<Validatio
       addRule(
         rules,
         'product-center-ai',
-        'Product Center by AI Box',
-        'Product bounding box should be centered',
+        'Posisi Produk di Tengah (AI)',
+        'Kotak deteksi produk harus berada di tengah foto',
         aiCenterScore >= 70,
         aiCenterScore,
-        `AI product center score: ${aiCenterScore}/100.`
+        `Skor posisi produk di tengah ${aiCenterScore}/100.`
       );
 
       const aiEdge = touchesEdge(productBox, analysis.width, analysis.height, 0.025);
@@ -193,22 +193,22 @@ async function validatePersonProduct(analysis: ImageAnalysis): Promise<Validatio
       addRule(
         rules,
         'product-not-edge-ai',
-        'AI Product Box Not Cropped',
-        'Product box must not touch frame edge',
+        'Produk Tidak Terpotong (AI)',
+        'Area deteksi produk tidak boleh menyentuh tepi foto',
         !aiEdge,
         aiEdge ? 45 : 95,
-        'AI bounding box edge check completed.'
+        'Pemeriksaan tepi bounding box AI selesai.'
       );
     }
   } catch (error) {
     addRule(
       rules,
       'ai-object-detection',
-      'AI Object Detection',
-      'TensorFlow.js model should load and detect objects',
+      'Deteksi Objek AI',
+      'Model AI harus berhasil dimuat dan mendeteksi objek',
       false,
       30,
-      'AI model failed to load. Open once with internet so the PWA can cache the model.'
+      'Model AI gagal dimuat. Buka sekali dengan internet agar PWA dapat menyimpan model dalam cache.'
     );
   }
 
@@ -235,53 +235,55 @@ async function validateSignboard(analysis: ImageAnalysis): Promise<ValidationRes
   addRule(
     rules,
     'not-blurry',
-    'Image Blur Tolerance',
-    'Blur is tolerated as long as signboard text is readable',
+    'Toleransi Gambar Buram',
+    'Foto masih dapat diterima selama teks papan nama terbaca',
     blurPass,
     Math.min(100, analysis.blurScore * 2.5),
     textReadable
-      ? `Blur score: ${analysis.blurScore.toFixed(1)}. Text readable, so light blur is tolerated.`
-      : `Blur score: ${analysis.blurScore.toFixed(1)}. Text not readable, minimum blur score required: 35.`
+  ? `Skor ketajaman: ${analysis.blurScore.toFixed(1)}. Teks terbaca dengan baik.`
+  : `Skor ketajaman: ${analysis.blurScore.toFixed(1)}. Teks belum terbaca dengan jelas.`
   );
 
   addRule(
     rules,
     'signboard-centered',
-    'Signboard Centered',
-    'Signboard should be centered',
+    'Posisi Papan Nama',
+    'Papan nama harus berada di tengah foto',
     analysis.centerScore >= 60,
     analysis.centerScore,
-    `Centering score: ${analysis.centerScore}/100.`
+    `Skor posisi tengah: ${analysis.centerScore}/100.`
   );
 
   addRule(
     rules,
     'signboard-not-cropped',
-    'Signboard Not Cropped',
-    'Signboard must not touch image border',
-    !analysis.cropped,
-    analysis.cropped ? 45 : 95,
-    analysis.cropped ? 'Main object too close to border.' : 'Main object has safe margin.'
+    'Papan Nama Tidak Terpotong',
+'Papan nama tidak boleh menyentuh tepi foto',
+!analysis.cropped,
+analysis.cropped ? 45 : 95,
+analysis.cropped
+  ? 'Papan nama terlalu dekat dengan tepi foto.'
+  : 'Papan nama memiliki jarak aman dari tepi foto.'
   );
 
   addRule(
     rules,
     'signboard-text-readable',
-    'Signboard Text Readable',
-    'Text on signboard must be readable',
-    textReadable,
-    Math.min(100, Math.max(0, ocr.confidence)),
-    `OCR confidence: ${ocr.confidence.toFixed(1)}. Text: "${truncate(cleaned, 80)}".`
+    'Tulisan Papan Nama Terbaca',
+'Tulisan pada papan nama harus terlihat jelas dan dapat dibaca',
+textReadable,
+Math.min(100, Math.max(0, ocr.confidence)),
+`Akurasi pembacaan teks: ${ocr.confidence.toFixed(1)}. Teks terdeteksi: "${truncate(cleaned, 80)}".`
   );
 
   addRule(
     rules,
     'brightness-ok',
-    'Lighting OK',
-    'Photo should not be too dark or too bright',
-    analysis.brightness >= 35 && analysis.brightness <= 225,
-    lightingScore(analysis.brightness),
-    `Brightness: ${analysis.brightness.toFixed(1)}.`
+    'Pencahayaan Baik',
+'Foto tidak boleh terlalu gelap atau terlalu terang',
+analysis.brightness >= 35 && analysis.brightness <= 225,
+lightingScore(analysis.brightness),
+`Tingkat kecerahan: ${analysis.brightness.toFixed(1)}.`
   );
 
   return buildResult(rules, 'signboard');
@@ -307,53 +309,55 @@ async function validateSerialNumber(analysis: ImageAnalysis): Promise<Validation
   addRule(
     rules,
     'not-blurry',
-    'Image Blur Tolerance',
-    'Blur is tolerated as long as the serial number text is readable',
-    blurPass,
-    Math.min(100, analysis.blurScore * 2.2),
-    ocrReadable
-      ? `Blur score: ${analysis.blurScore.toFixed(1)}. OCR readable, so light blur is tolerated.`
-      : `Blur score: ${analysis.blurScore.toFixed(1)}. OCR not readable, minimum blur score required: 45.`
+    'Toleransi Foto Buram',
+'Foto masih dapat diterima selama teks nomor seri dapat dibaca',
+blurPass,
+Math.min(100, analysis.blurScore * 2.2),
+ocrReadable
+  ? `Skor ketajaman: ${analysis.blurScore.toFixed(1)}. Teks nomor seri berhasil dibaca sehingga sedikit buram masih dapat ditoleransi.`
+  : `Skor ketajaman: ${analysis.blurScore.toFixed(1)}. Teks nomor seri belum dapat dibaca. Minimal skor ketajaman yang diperlukan adalah 28.`
   );
 
   addRule(
     rules,
     'text-centered',
-    'Text Centered',
-    'Serial number area should be centered',
-    analysis.centerScore >= 58,
-    analysis.centerScore,
-    `Centering score: ${analysis.centerScore}/100.`
+    'Nomor Seri di Tengah',
+'Nomor seri harus berada di area tengah foto',
+analysis.centerScore >= 58,
+analysis.centerScore,
+`Skor posisi tengah: ${analysis.centerScore}/100.`
   );
 
   addRule(
     rules,
     'text-not-cropped',
-    'Text Not Cropped',
-    'Serial number must not be cut off',
-    !analysis.cropped,
-    analysis.cropped ? 45 : 95,
-    analysis.cropped ? 'Main text/object too close to border.' : 'Main region has safe margin.'
+    'Nomor Seri Tidak Terpotong',
+'Nomor seri harus terlihat utuh dan tidak terpotong',
+!analysis.cropped,
+analysis.cropped ? 45 : 95,
+analysis.cropped
+  ? 'Nomor seri terlalu dekat dengan tepi foto.'
+  : 'Nomor seri memiliki jarak aman dari tepi foto.'
   );
 
   addRule(
     rules,
     'ocr-readable',
-    'Text Readable by OCR',
-    'Serial number text must be readable',
-    ocrReadable,
-    Math.min(100, Math.max(0, ocr.confidence)),
-    `OCR confidence: ${ocr.confidence.toFixed(1)}. Text: "${truncate(cleaned, 60)}".`
+    'Teks Nomor Seri Terbaca',
+'Nomor seri harus terlihat jelas dan dapat dibaca',
+ocrReadable,
+Math.min(100, Math.max(0, ocr.confidence)),
+`Akurasi pembacaan teks: ${ocr.confidence.toFixed(1)}. Teks terdeteksi: "${truncate(cleaned, 60)}".`
   );
 
   addRule(
     rules,
     'text-contrast',
-    'Text Contrast OK',
-    'Text should have enough contrast',
-    analysis.contrast >= 14,
-    Math.min(100, analysis.contrast * 3),
-    `Contrast score: ${analysis.contrast.toFixed(1)}.`
+    'Kontras Teks Memadai',
+'Teks harus terlihat jelas dan tidak menyatu dengan latar belakang',
+analysis.contrast >= 14,
+Math.min(100, analysis.contrast * 3),
+`Nilai kontras: ${analysis.contrast.toFixed(1)}.`
   );
 
   return buildResult(rules, 'serial-number');
@@ -379,43 +383,45 @@ async function validateBastDocument(analysis: ImageAnalysis): Promise<Validation
   addRule(
     rules,
     'document-centered',
-    'Document Centered',
-    'BAST document should be centered',
-    analysis.centerScore >= 55,
-    analysis.centerScore,
-    `Centering score: ${analysis.centerScore}/100.`
+    'Dokumen di Tengah',
+'Dokumen BAST harus berada di area tengah foto',
+analysis.centerScore >= 55,
+analysis.centerScore,
+`Skor posisi tengah: ${analysis.centerScore}/100.`
   );
 
   addRule(
     rules,
     'document-not-cropped',
-    'Document Not Cropped',
-    'Document must not be cut off',
-    !analysis.cropped,
-    analysis.cropped ? 45 : 95,
-    analysis.cropped ? 'Document/main region too close to border.' : 'Document/main region has safe margin.'
+    'Dokumen Tidak Terpotong',
+'Dokumen harus terlihat utuh dan tidak terpotong',
+!analysis.cropped,
+analysis.cropped ? 45 : 95,
+analysis.cropped
+  ? 'Dokumen terlalu dekat dengan tepi foto.'
+  : 'Dokumen memiliki jarak aman dari tepi foto.'
   );
 
   addRule(
     rules,
     'not-blurry',
-    'Image Blur Tolerance',
-    'Blur is tolerated as long as BAST text is readable',
-    blurPass,
-    Math.min(100, analysis.blurScore * 2.2),
-    textReadable
-      ? `Blur score: ${analysis.blurScore.toFixed(1)}. OCR readable, so light blur is tolerated.`
-      : `Blur score: ${analysis.blurScore.toFixed(1)}. OCR not readable, minimum blur score required: 42.`
+    'Toleransi Foto Buram',
+  'Foto masih dapat diterima selama teks dokumen BAST dapat dibaca',
+  blurPass,
+  Math.min(100, analysis.blurScore * 2.2),
+  textReadable
+    ? `Skor ketajaman: ${analysis.blurScore.toFixed(1)}. Teks dokumen berhasil dibaca sehingga sedikit buram masih dapat ditoleransi.`
+    : `Skor ketajaman: ${analysis.blurScore.toFixed(1)}. Teks dokumen belum dapat dibaca. Minimal skor ketajaman yang diperlukan adalah 28.`
   );
 
   addRule(
     rules,
     'text-readable',
-    'Text Readable',
-    'BAST text must be readable',
-    textReadable,
-    Math.min(100, Math.max(0, ocr.confidence)),
-    `OCR confidence: ${ocr.confidence.toFixed(1)}. Text preview: "${truncate(cleaned, 80)}".`
+    'Teks Dokumen Terbaca',
+'Teks dokumen harus terlihat jelas dan dapat dibaca',
+textReadable,
+Math.min(100, Math.max(0, ocr.confidence)),
+`Tingkat keterbacaan teks: ${ocr.confidence.toFixed(1)}. Teks terdeteksi: "${truncate(cleaned, 80)}".`
   );
 
   const stampOverlap = estimateStampOverlapWithText(analysis.canvas, ocr.words);
@@ -423,11 +429,11 @@ async function validateBastDocument(analysis: ImageAnalysis): Promise<Validation
   addRule(
     rules,
     'stamp-coverage',
-    'Stamp Coverage Max 20%',
-    'Stamp may cover maximum 20% of text area',
-    stampOverlap <= 20,
-    Math.max(0, 100 - stampOverlap * 3),
-    `Estimated stamp/text overlap: ${stampOverlap.toFixed(1)}%. Maximum allowed: 20%.`
+    'Stempel Tidak Menutupi Teks',
+'Stempel tidak boleh menutupi terlalu banyak area teks dokumen',
+stampOverlap <= 20,
+Math.max(0, 100 - stampOverlap * 3),
+`Area teks yang tertutup stempel: ${stampOverlap.toFixed(1)}%. Maksimal yang diperbolehkan: 20%.`
   );
 
   return buildResult(rules, 'bast-document');
