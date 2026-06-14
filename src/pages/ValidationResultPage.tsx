@@ -43,18 +43,32 @@ export const ValidationResultPage: React.FC = () => {
     navigate(`/capture/${categoryId}`);
   };
 
+  // 
   const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      await savePhoto(imageData, validation.category, validation);
-      setSaved(true);
-      setTimeout(() => navigate('/gallery'), 1500);
-    } catch (error) {
-      console.error('Failed to save photo:', error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  setIsSaving(true);
+
+  try {
+    // simpan ke galeri aplikasi
+    await savePhoto(imageData, validation.category, validation);
+
+    // simpan ke perangkat
+    const link = document.createElement('a');
+    link.href = imageData;
+    link.download = `${validation.category}-${Date.now()}.jpg`;
+    link.click();
+
+    setSaved(true);
+
+    setTimeout(() => {
+      navigate('/gallery');
+    }, 1500);
+
+  } catch (error) {
+    console.error('Failed to save photo:', error);
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-emerald-600';
@@ -164,7 +178,7 @@ export const ValidationResultPage: React.FC = () => {
                 disabled={saved}
                 icon={saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
               >
-                {saved ? 'Saved!' : 'Save Photo'}
+                {saved ? 'Saved!' : 'Simpan ke Perangkat'}
               </Button>
             )}
           </div>

@@ -54,7 +54,8 @@ export async function analyzeImage(imageData: string): Promise<ImageAnalysis> {
   const contrast = calculateContrast(gray);
   const mainBox = detectMainBox(gray, canvas.width, canvas.height);
   const centerScore = mainBox ? calculateCenteringScore(mainBox, canvas.width, canvas.height) : 0;
-  const cropped = mainBox ? touchesEdge(mainBox, canvas.width, canvas.height, 0.035) : true;
+  // const cropped = mainBox ? touchesEdge(mainBox, canvas.width, canvas.height, 0.035) : true;
+  const cropped = mainBox ? touchesEdge(mainBox, canvas.width, canvas.height, 0.015) : false;
 
   return {
     width: canvas.width,
@@ -220,11 +221,16 @@ async function validateSignboard(analysis: ImageAnalysis): Promise<ValidationRes
   const ocr = await runOcrSafe(analysis.canvas);
   const cleaned = cleanText(ocr.text);
 
-  const textReadable = ocr.confidence >= 35 && cleaned.length >= 5;
+  // const textReadable = ocr.confidence >= 35 && cleaned.length >= 5;
+
+  // const blurPass = textReadable
+  //   ? analysis.blurScore >= 25
+  //   : analysis.blurScore >= 35;
+  const textReadable = ocr.confidence >= 22 && cleaned.length >= 3;
 
   const blurPass = textReadable
-    ? analysis.blurScore >= 25
-    : analysis.blurScore >= 35;
+  ? analysis.blurScore >= 15
+  : analysis.blurScore >= 25;
 
   addRule(
     rules,
@@ -243,7 +249,7 @@ async function validateSignboard(analysis: ImageAnalysis): Promise<ValidationRes
     'signboard-centered',
     'Signboard Centered',
     'Signboard should be centered',
-    analysis.centerScore >= 72,
+    analysis.centerScore >= 60,
     analysis.centerScore,
     `Centering score: ${analysis.centerScore}/100.`
   );
@@ -287,11 +293,16 @@ async function validateSerialNumber(analysis: ImageAnalysis): Promise<Validation
   const ocr = await runOcrSafe(analysis.canvas);
   const cleaned = cleanText(ocr.text);
 
-  const ocrReadable = ocr.confidence >= 40 && cleaned.length >= 4;
+  // const ocrReadable = ocr.confidence >= 40 && cleaned.length >= 4;
+
+  // const blurPass = ocrReadable
+  //   ? analysis.blurScore >= 25
+  //   : analysis.blurScore >= 45;
+  const ocrReadable = ocr.confidence >= 22 && cleaned.length >= 3;
 
   const blurPass = ocrReadable
-    ? analysis.blurScore >= 25
-    : analysis.blurScore >= 45;
+  ? analysis.blurScore >= 15
+  : analysis.blurScore >= 28;
 
   addRule(
     rules,
@@ -310,7 +321,7 @@ async function validateSerialNumber(analysis: ImageAnalysis): Promise<Validation
     'text-centered',
     'Text Centered',
     'Serial number area should be centered',
-    analysis.centerScore >= 72,
+    analysis.centerScore >= 58,
     analysis.centerScore,
     `Centering score: ${analysis.centerScore}/100.`
   );
@@ -340,7 +351,7 @@ async function validateSerialNumber(analysis: ImageAnalysis): Promise<Validation
     'text-contrast',
     'Text Contrast OK',
     'Text should have enough contrast',
-    analysis.contrast >= 22,
+    analysis.contrast >= 14,
     Math.min(100, analysis.contrast * 3),
     `Contrast score: ${analysis.contrast.toFixed(1)}.`
   );
@@ -354,18 +365,23 @@ async function validateBastDocument(analysis: ImageAnalysis): Promise<Validation
   const ocr = await runOcrSafe(analysis.canvas);
   const cleaned = cleanText(ocr.text);
 
-  const textReadable = ocr.confidence >= 38 && cleaned.length >= 15;
+  // const textReadable = ocr.confidence >= 38 && cleaned.length >= 15;
+
+  // const blurPass = textReadable
+  //   ? analysis.blurScore >= 25
+  //   : analysis.blurScore >= 42;
+  const textReadable = ocr.confidence >= 20 && cleaned.length >= 8;
 
   const blurPass = textReadable
-    ? analysis.blurScore >= 25
-    : analysis.blurScore >= 42;
+  ? analysis.blurScore >= 15
+  : analysis.blurScore >= 28;
 
   addRule(
     rules,
     'document-centered',
     'Document Centered',
     'BAST document should be centered',
-    analysis.centerScore >= 70,
+    analysis.centerScore >= 55,
     analysis.centerScore,
     `Centering score: ${analysis.centerScore}/100.`
   );
@@ -745,7 +761,6 @@ function buildResult(rules: ValidationRule[], category: PhotoCategory): Validati
     'bast-document': [
       'text-readable',
       'document-centered',
-      'document-not-cropped',
       'stamp-coverage'
     ]
   };
@@ -757,7 +772,7 @@ function buildResult(rules: ValidationRule[], category: PhotoCategory): Validati
 
   return {
     overallScore,
-    passed: requiredPassed && overallScore >= 70,
+    passed: requiredPassed && overallScore >= 60,
     rules,
     timestamp: new Date(),
     category
