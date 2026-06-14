@@ -21,6 +21,9 @@ export const CameraCapturePage: React.FC = () => {
   const [isValidating, setIsValidating] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
 
+  // Tambahan kamera fokus
+   const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
+
   const category = CATEGORIES.find((c) => c.id === categoryId) as {
     id: PhotoCategory;
     name: string;
@@ -101,6 +104,57 @@ export const CameraCapturePage: React.FC = () => {
       setIsValidating(false);
     }
   };
+
+  // tambahan logic fokus kamera
+  const handleTapToFocus = async (event: React.MouseEvent<HTMLVideoElement>) => {
+  if (!streamRef.current || !videoRef.current) return;
+
+  const rect = videoRef.current.getBoundingClientRect();
+
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
+  setFocusPoint({ x, y });
+
+  setTimeout(() => {
+    setFocusPoint(null);
+  }, 800);
+
+  try {
+    const track = streamRef.current.getVideoTracks()[0];
+
+    if (!track) return;
+
+    const capabilities = track.getCapabilities() as any;
+
+    if (capabilities.focusMode?.includes('continuous')) {
+      await track.applyConstraints({
+        advanced: [
+          {
+            focusMode: 'continuous'
+          } as any
+        ]
+      });
+    }
+
+    if (capabilities.pointsOfInterest) {
+      await track.applyConstraints({
+        advanced: [
+          {
+            pointsOfInterest: [
+              {
+                x: x / rect.width,
+                y: y / rect.height
+              }
+            ]
+          } as any
+        ]
+      });
+    }
+  } catch (error) {
+    console.log('Tap focus tidak didukung browser ini:', error);
+  }
+};
 
   const handleCapture = async () => {
     if (!videoRef.current || !canvasRef.current || !categoryId) return;
@@ -208,14 +262,33 @@ export const CameraCapturePage: React.FC = () => {
 
           {!capturedImage ? (
             <>
-              <video
+              {/* <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
                 className="absolute inset-0 w-full h-full object-cover bg-black"
                 style={{ opacity: isLoading ? 0 : 1 }}
+              /> */}
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                onClick={handleTapToFocus}
+                className="absolute inset-0 w-full h-full object-cover bg-black"
+                style={{ opacity: isLoading ? 0 : 1 }}
               />
+
+              {focusPoint && (
+                <div
+                  className="absolute z-30 w-16 h-16 border-2 border-yellow-400 rounded-full pointer-events-none animate-ping"
+                  style={{
+                    left: focusPoint.x - 32,
+                    top: focusPoint.y - 32
+                  }}
+                />
+              )}
 
               <div className="absolute top-4 left-4 right-4 z-20 flex justify-between items-start pointer-events-none">
                 <Badge variant="info">{category.name}</Badge>
