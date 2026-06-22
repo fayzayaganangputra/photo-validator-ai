@@ -20,12 +20,9 @@ export const CameraCapturePage: React.FC = () => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
-  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
 
-  const [centerStatus, setCenterStatus] = useState({
-    isCenter: false,
-    message: 'Arahkan objek ke tengah'
-  });
+  // Tambahan kamera fokus
+   const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
 
   const category = CATEGORIES.find((c) => c.id === categoryId) as {
     id: PhotoCategory;
@@ -46,10 +43,6 @@ export const CameraCapturePage: React.FC = () => {
   const startCamera = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    setCenterStatus({
-      isCenter: false,
-      message: 'Arahkan objek ke tengah'
-    });
 
     try {
       stopCamera();
@@ -87,90 +80,6 @@ export const CameraCapturePage: React.FC = () => {
     };
   }, [startCamera]);
 
-  const checkCenterRealtime = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-
-    if (!video || !canvas || video.videoWidth === 0 || video.videoHeight === 0) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const width = 320;
-    const height = Math.round((video.videoHeight / video.videoWidth) * width);
-
-    canvas.width = width;
-    canvas.height = height;
-
-    ctx.drawImage(video, 0, 0, width, height);
-
-    const frame = ctx.getImageData(0, 0, width, height);
-    const data = frame.data;
-
-    let minX = width;
-    let minY = height;
-    let maxX = 0;
-    let maxY = 0;
-    let count = 0;
-
-    for (let y = 1; y < height - 1; y += 2) {
-      for (let x = 1; x < width - 1; x += 2) {
-        const i = (y * width + x) * 4;
-
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-
-        const brightness = (r + g + b) / 3;
-
-        if (brightness > 45 && brightness < 230) {
-          minX = Math.min(minX, x);
-          minY = Math.min(minY, y);
-          maxX = Math.max(maxX, x);
-          maxY = Math.max(maxY, y);
-          count++;
-        }
-      }
-    }
-
-    if (count < 500) {
-      setCenterStatus({
-        isCenter: false,
-        message: 'Objek belum terdeteksi jelas'
-      });
-      return;
-    }
-
-    const objectCenterX = (minX + maxX) / 2;
-    const objectCenterY = (minY + maxY) / 2;
-
-    const frameCenterX = width / 2;
-    const frameCenterY = height / 2;
-
-    const diffX = Math.abs(objectCenterX - frameCenterX);
-    const diffY = Math.abs(objectCenterY - frameCenterY);
-
-    const toleranceX = width * 0.13;
-    const toleranceY = height * 0.13;
-
-    const isCenter = diffX <= toleranceX && diffY <= toleranceY;
-
-    setCenterStatus({
-      isCenter,
-      message: isCenter ? 'Objek sudah di tengah' : 'Geser objek ke tengah'
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!stream || capturedImage || isLoading || isValidating) return;
-
-    const interval = setInterval(() => {
-      checkCenterRealtime();
-    }, 500);
-
-    return () => clearInterval(interval);
-  }, [stream, capturedImage, isLoading, isValidating, checkCenterRealtime]);
-
   const validateAndNavigate = async (imageData: string) => {
     if (!categoryId) return;
 
@@ -196,63 +105,59 @@ export const CameraCapturePage: React.FC = () => {
     }
   };
 
+  // tambahan logic fokus kamera
   const handleTapToFocus = async (event: React.MouseEvent<HTMLVideoElement>) => {
-    if (!streamRef.current || !videoRef.current) return;
+  if (!streamRef.current || !videoRef.current) return;
 
-    const rect = videoRef.current.getBoundingClientRect();
+  const rect = videoRef.current.getBoundingClientRect();
 
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
 
-    setFocusPoint({ x, y });
+  setFocusPoint({ x, y });
 
-    setTimeout(() => {
-      setFocusPoint(null);
-    }, 800);
+  setTimeout(() => {
+    setFocusPoint(null);
+  }, 800);
 
-    try {
-      const track = streamRef.current.getVideoTracks()[0];
-      if (!track) return;
+  try {
+    const track = streamRef.current.getVideoTracks()[0];
 
-      const capabilities = track.getCapabilities() as any;
+    if (!track) return;
 
-      if (capabilities.focusMode?.includes('continuous')) {
-        await track.applyConstraints({
-          advanced: [
-            {
-              focusMode: 'continuous'
-            } as any
-          ]
-        });
-      }
+    const capabilities = track.getCapabilities() as any;
 
-      if (capabilities.pointsOfInterest) {
-        await track.applyConstraints({
-          advanced: [
-            {
-              pointsOfInterest: [
-                {
-                  x: x / rect.width,
-                  y: y / rect.height
-                }
-              ]
-            } as any
-          ]
-        });
-      }
-    } catch (error) {
-      console.log('Tap focus tidak didukung browser ini:', error);
+    if (capabilities.focusMode?.includes('continuous')) {
+      await track.applyConstraints({
+        advanced: [
+          {
+            focusMode: 'continuous'
+          } as any
+        ]
+      });
     }
-  };
+
+    if (capabilities.pointsOfInterest) {
+      await track.applyConstraints({
+        advanced: [
+          {
+            pointsOfInterest: [
+              {
+                x: x / rect.width,
+                y: y / rect.height
+              }
+            ]
+          } as any
+        ]
+      });
+    }
+  } catch (error) {
+    console.log('Tap focus tidak didukung browser ini:', error);
+  }
+};
 
   const handleCapture = async () => {
     if (!videoRef.current || !canvasRef.current || !categoryId) return;
-
-    if (!centerStatus.isCenter) {
-      setError('Objek belum berada di tengah. Geser objek ke tengah terlebih dahulu.');
-      setTimeout(() => setError(null), 1500);
-      return;
-    }
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -299,10 +204,6 @@ export const CameraCapturePage: React.FC = () => {
 
   const handleRetake = () => {
     setCapturedImage(null);
-    setCenterStatus({
-      isCenter: false,
-      message: 'Arahkan objek ke tengah'
-    });
 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -361,6 +262,14 @@ export const CameraCapturePage: React.FC = () => {
 
           {!capturedImage ? (
             <>
+              {/* <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="absolute inset-0 w-full h-full object-cover bg-black"
+                style={{ opacity: isLoading ? 0 : 1 }}
+              /> */}
               <video
                 ref={videoRef}
                 autoPlay
@@ -385,18 +294,6 @@ export const CameraCapturePage: React.FC = () => {
                 <Badge variant="info">{category.name}</Badge>
               </div>
 
-              <div className="absolute top-16 left-4 right-4 z-30 pointer-events-none">
-                <div
-                  className={`rounded-xl px-4 py-3 text-center text-sm font-semibold shadow-lg ${
-                    centerStatus.isCenter
-                      ? 'bg-green-500/90 text-white'
-                      : 'bg-yellow-400/90 text-black'
-                  }`}
-                >
-                  {centerStatus.message}
-                </div>
-              </div>
-
               <div className="absolute inset-0 z-10 pointer-events-none">
                 <div
                   className="absolute"
@@ -408,11 +305,7 @@ export const CameraCapturePage: React.FC = () => {
                     height: '70%'
                   }}
                 >
-                  <div
-                    className={`absolute inset-0 border-2 rounded-3xl ${
-                      centerStatus.isCenter ? 'border-green-400/90' : 'border-white/60'
-                    }`}
-                  />
+                  <div className="absolute inset-0 border-2 border-white/60 rounded-3xl" />
 
                   <div className="absolute top-0 bottom-0 left-1/3 w-px bg-white/30" />
                   <div className="absolute top-0 bottom-0 left-2/3 w-px bg-white/30" />
@@ -420,9 +313,7 @@ export const CameraCapturePage: React.FC = () => {
                   <div className="absolute left-0 right-0 top-2/3 h-px bg-white/30" />
 
                   <Focus
-                    className={`w-8 h-8 absolute ${
-                      centerStatus.isCenter ? 'text-green-400/90' : 'text-white/40'
-                    }`}
+                    className="w-8 h-8 text-white/40 absolute"
                     style={{
                       left: '50%',
                       top: '50%',
@@ -477,7 +368,7 @@ export const CameraCapturePage: React.FC = () => {
 
               <button
                 onClick={handleCapture}
-                disabled={!stream || isLoading || isValidating || !centerStatus.isCenter}
+                disabled={!stream || isLoading || isValidating}
                 className="w-20 h-20 rounded-full bg-white flex items-center justify-center ring-4 ring-white/30 hover:ring-white/50 transition-all disabled:opacity-50"
                 title="Ambil foto"
               >
