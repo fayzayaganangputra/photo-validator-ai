@@ -21,7 +21,7 @@ export const SavedPhotosPage: React.FC = () => {
       const savedPhotos = await getAllPhotos();
       setPhotos(savedPhotos);
     } catch (error) {
-      console.error('Failed to load photos:', error);
+      console.error('Foto gagal dimuat:', error);
     } finally {
       setLoading(false);
     }
@@ -34,7 +34,7 @@ export const SavedPhotosPage: React.FC = () => {
       setPhotos((prev) => prev.filter((p) => p.id !== id));
       setSelectedPhoto(null);
     } catch (error) {
-      console.error('Failed to delete photo:', error);
+      console.error('Gagal menghapus foto:', error);
     } finally {
       setDeleting(null);
     }
@@ -57,7 +57,7 @@ export const SavedPhotosPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
-      <Header title="Saved Photos" actions={
+      <Header title="Foto Tersimpan" actions={
         photos.length > 0 && (
           <span className="text-sm text-slate-500">
             {photos.length} {photos.length === 1 ? 'photo' : 'photos'}
