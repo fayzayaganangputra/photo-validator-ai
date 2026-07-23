@@ -15,107 +15,158 @@ export async function addWatermarkToImage(
 
     image.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = image.width;
-      canvas.height = image.height;
+      canvas.width = image.naturalWidth || image.width;
+      canvas.height = image.naturalHeight || image.height;
 
       const ctx = canvas.getContext('2d');
 
       if (!ctx) {
-        reject(new Error('Canvas tidak tersedia'));
+        reject(new Error('Canvas tidak tersedia.'));
         return;
       }
 
-      // ===========================
       // Gambar asli
-      // ===========================
-      ctx.drawImage(image, 0, 0);
+      ctx.drawImage(
+        image,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
 
-      // ===========================
-      // Ukuran dinamis
-      // ===========================
-      const padding = Math.max(24, image.width * 0.025);
-      const fontTitle = Math.max(28, image.width * 0.022);
-      const fontText = Math.max(22, image.width * 0.017);
+      /*
+       * Tampilan dibuat menyerupai timestamp kamera:
+       * - posisi kiri bawah
+       * - teks putih
+       * - tanpa background
+       * - tanpa shadow
+       * - tanpa ikon
+       * - ukuran seluruh baris sama
+       * - font normal
+       */
+      const referenceSize = Math.min(
+        canvas.width,
+        canvas.height
+      );
 
-      const lineHeight = fontText + 10;
+      const fontSize = Math.max(
+        16,
+        Math.round(referenceSize * 0.024)
+      );
+
+      const lineHeight = Math.round(fontSize * 1.25);
+
+      const marginLeft = Math.max(
+        16,
+        Math.round(canvas.width * 0.025)
+      );
+
+      const marginBottom = Math.max(
+        16,
+        Math.round(canvas.height * 0.025)
+      );
+
+      const maxTextWidth =
+        canvas.width - marginLeft * 2;
+
+      const appName =
+        options.appName.trim() || 'SEANANTA';
+
+      const dateAndTime = [
+        options.date.trim(),
+        options.time.trim(),
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+      const locationText =
+        options.locationText.trim();
 
       const lines = [
-        options.appName,
-        `${options.date} | ${options.time}`,
-        options.locationText
-      ];
+        appName,
+        dateAndTime,
+        locationText,
+      ].filter((line) => line.length > 0);
 
-      const boxHeight =
-        padding +
-        fontTitle +
-        18 +
-        (lines.length - 1) * lineHeight +
-        padding;
-
-      // ===========================
-      // Background watermark
-      // ===========================
-      ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(
-        0,
-        image.height - boxHeight,
-        image.width,
-        boxHeight
-      );
-
-      // ===========================
-      // Shadow text
-      // ===========================
-      ctx.shadowColor = 'rgba(0,0,0,0.8)';
-      ctx.shadowBlur = 6;
-      ctx.shadowOffsetX = 1;
-      ctx.shadowOffsetY = 1;
-
-      // ===========================
-      // Judul
-      // ===========================
-      let y = image.height - boxHeight + padding + fontTitle;
+      ctx.save();
 
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = `bold ${fontTitle}px Arial`;
+      ctx.font = `${fontSize}px Arial, Helvetica, sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
 
-      ctx.fillText(
-        options.appName,
-        padding,
-        y
+      // Pastikan tidak ada efek apa pun
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+
+      const firstLineY =
+        canvas.height -
+        marginBottom -
+        lineHeight * (lines.length - 1);
+
+      lines.forEach((line, index) => {
+        const y =
+          firstLineY + index * lineHeight;
+
+        ctx.fillText(
+          fitTextToWidth(
+            ctx,
+            line,
+            maxTextWidth
+          ),
+          marginLeft,
+          y,
+          maxTextWidth
+        );
+      });
+
+      ctx.restore();
+
+      resolve(
+        canvas.toDataURL(
+          'image/jpeg',
+          0.95
+        )
       );
-
-      // ===========================
-      // Tanggal & Jam
-      // ===========================
-      y += lineHeight;
-
-      ctx.font = `${fontText}px Arial`;
-
-      ctx.fillText(
-        `${options.date} | ${options.time}`,
-        padding,
-        y
-      );
-
-      // ===========================
-      // Lokasi
-      // ===========================
-      y += lineHeight;
-
-      ctx.fillText(
-        options.locationText,
-        padding,
-        y
-      );
-
-      resolve(canvas.toDataURL('image/jpeg', 0.95));
     };
 
     image.onerror = () => {
-      reject(new Error('Gagal memuat gambar'));
+      reject(
+        new Error(
+          'Gagal memuat gambar untuk proses watermark.'
+        )
+      );
     };
 
     image.src = imageData;
   });
+}
+
+function fitTextToWidth(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number
+): string {
+  if (ctx.measureText(text).width <= maxWidth) {
+    return text;
+  }
+
+  const suffix = '...';
+  let shortenedText = text;
+
+  while (
+    shortenedText.length > 0 &&
+    ctx.measureText(
+      shortenedText + suffix
+    ).width > maxWidth
+  ) {
+    shortenedText =
+      shortenedText.slice(0, -1);
+  }
+
+  return shortenedText
+    ? shortenedText + suffix
+    : suffix;
 }

@@ -554,14 +554,14 @@ export const ValidationResultPage: React.FC = () => {
                     </p>
 
                     <p className="text-sm mt-1">
-                      {formatDateToIndonesian(
-                        watermarkDate
-                      ) || 'Tanggal belum diisi'}
-                      {' | '}
+                    {formatDateToIndonesian(
+                      watermarkDate
+                     ) || 'Tanggal belum diisi'}
+                      {' '}
                       {watermarkTime
-                        ? `${watermarkTime} WIB`
-                        : 'Jam belum diisi'}
-                    </p>
+                    ? `${watermarkTime} WIB`
+                    : 'Jam belum diisi'}
+                   </p>
 
                     <p className="text-sm mt-1 break-words">
                       {watermarkLocation.trim() ||
