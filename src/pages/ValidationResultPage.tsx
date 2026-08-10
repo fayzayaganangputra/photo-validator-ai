@@ -13,6 +13,7 @@ import {
   Clock,
   MapPin,
   Image as ImageIcon,
+  LocateFixed,
 } from 'lucide-react';
 
 import {
@@ -36,6 +37,11 @@ import { addWatermarkToImage } from '../utils/watermark';
 interface ValidationLocationState {
   imageData?: string;
   validation?: ValidationResult;
+}
+
+interface Coordinates {
+  latitude: number;
+  longitude: number;
 }
 
 const getCurrentDateInput = (): string => {
@@ -68,7 +74,19 @@ const formatDateToIndonesian = (dateValue: string): string => {
     return dateValue;
   }
 
-  const [year, month, day] = dateParts;
+  const [yearString, monthString, dayString] = dateParts;
+
+  const year = Number(yearString);
+  const month = Number(monthString);
+  const day = Number(dayString);
+
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    !Number.isFinite(day)
+  ) {
+    return dateValue;
+  }
 
   const monthNames = [
     'Januari',
@@ -85,14 +103,45 @@ const formatDateToIndonesian = (dateValue: string): string => {
     'Desember',
   ];
 
-  const monthIndex = Number(month) - 1;
-  const monthName = monthNames[monthIndex];
+  const dayNames = [
+    'Minggu',
+    'Senin',
+    'Selasa',
+    'Rabu',
+    'Kamis',
+    'Jumat',
+    'Sabtu',
+  ];
+
+  const monthName = monthNames[month - 1];
 
   if (!monthName) {
     return dateValue;
   }
 
-  return `${Number(day)} ${monthName} ${year}`;
+  // Dibuat dengan constructor lokal agar tanggal tidak bergeser karena timezone.
+  const localDate = new Date(year, month - 1, day);
+  const dayName = dayNames[localDate.getDay()];
+
+  return `${dayName}, ${day} ${monthName} ${year}`;
+};
+
+const formatCoordinatePreview = (
+  coordinates: Coordinates | null
+): string => {
+  if (!coordinates) {
+    return 'Koordinat belum diambil';
+  }
+
+  const latDirection =
+    coordinates.latitude < 0 ? 'S' : 'N';
+
+  const lngDirection =
+    coordinates.longitude < 0 ? 'W' : 'E';
+
+  return `${Math.abs(coordinates.latitude).toFixed(6)}°${latDirection}, ${Math.abs(
+    coordinates.longitude
+  ).toFixed(6)}°${lngDirection}`;
 };
 
 export const ValidationResultPage: React.FC = () => {
@@ -124,6 +173,15 @@ export const ValidationResultPage: React.FC = () => {
   );
 
   const [watermarkLocation, setWatermarkLocation] =
+    useState('');
+
+  const [coordinates, setCoordinates] =
+    useState<Coordinates | null>(null);
+
+  const [isGettingLocation, setIsGettingLocation] =
+    useState(false);
+
+  const [locationError, setLocationError] =
     useState('');
 
   const [formError, setFormError] = useState('');
@@ -161,6 +219,56 @@ export const ValidationResultPage: React.FC = () => {
     });
   };
 
+  const handleGetCurrentLocation = (): void => {
+    setLocationError('');
+
+    if (!navigator.geolocation) {
+      setLocationError(
+        'Perangkat atau browser ini tidak mendukung GPS/geolocation.'
+      );
+      return;
+    }
+
+    setIsGettingLocation(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCoordinates({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+
+        setLocationError('');
+        setIsGettingLocation(false);
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+
+        let message =
+          'Lokasi GPS tidak dapat diambil. Pastikan izin lokasi aktif.';
+
+        if (error.code === error.PERMISSION_DENIED) {
+          message =
+            'Izin lokasi ditolak. Aktifkan izin lokasi untuk PWA/browser lalu coba lagi.';
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          message =
+            'Posisi GPS tidak tersedia saat ini. Coba pindah ke area dengan sinyal lokasi lebih baik.';
+        } else if (error.code === error.TIMEOUT) {
+          message =
+            'Pengambilan lokasi terlalu lama. Silakan coba lagi.';
+        }
+
+        setLocationError(message);
+        setIsGettingLocation(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      }
+    );
+  };
+
   const validateWatermarkForm = (): boolean => {
     if (!watermarkDate) {
       setFormError('Tanggal watermark wajib diisi.');
@@ -182,105 +290,122 @@ export const ValidationResultPage: React.FC = () => {
   };
 
   const handleSave = async (): Promise<void> => {
-  if (isSaving || saved) {
-    return;
-  }
+    if (isSaving || saved) {
+      return;
+    }
 
-  if (!validateWatermarkForm()) {
-    console.warn('Form watermark belum lengkap', {
-      watermarkDate,
-      watermarkTime,
-      watermarkLocation,
-    });
-
-    return;
-  }
-
-  setIsSaving(true);
-  setSaveError('');
-
-  try {
-    const formattedDate =
-      formatDateToIndonesian(watermarkDate);
-
-    console.log('===== PROSES WATERMARK DIMULAI =====');
-    console.log('Foto asli tersedia:', Boolean(imageData));
-    console.log('Panjang data foto asli:', imageData.length);
-    console.log('Kategori:', category.name);
-    console.log('Tanggal input:', watermarkDate);
-    console.log('Tanggal hasil format:', formattedDate);
-    console.log('Jam:', watermarkTime);
-    console.log('Lokasi:', watermarkLocation.trim());
-
-    const watermarkedImage =
-      await addWatermarkToImage(imageData, {
-        appName: 'SEANANTA',
-        categoryName: category.name,
-        date: formattedDate,
-        time: `${watermarkTime} WIB`,
-        locationText: watermarkLocation.trim(),
+    if (!validateWatermarkForm()) {
+      console.warn('Form watermark belum lengkap', {
+        watermarkDate,
+        watermarkTime,
+        watermarkLocation,
+        coordinates,
       });
 
-    console.log('Watermark berhasil dibuat:', Boolean(watermarkedImage));
-    console.log(
-      'Panjang data foto setelah watermark:',
-      watermarkedImage.length
-    );
-    console.log(
-      'Foto asli dan watermark berbeda:',
-      imageData !== watermarkedImage
-    );
+      return;
+    }
 
-    await savePhoto(
-      watermarkedImage,
-      validation.category,
-      validation
-    );
+    setIsSaving(true);
+    setSaveError('');
 
-    console.log(
-      'Foto berhasil disimpan ke galeri lokal aplikasi'
-    );
+    try {
+      const formattedDate =
+        formatDateToIndonesian(watermarkDate);
 
-    const link = document.createElement('a');
+      console.log('===== PROSES WATERMARK DIMULAI =====');
+      console.log('Foto asli tersedia:', Boolean(imageData));
+      console.log('Panjang data foto asli:', imageData.length);
+      console.log('Kategori:', category.name);
+      console.log('Tanggal input:', watermarkDate);
+      console.log('Tanggal hasil format:', formattedDate);
+      console.log('Jam:', watermarkTime);
+      console.log('Lokasi:', watermarkLocation.trim());
+      console.log('Koordinat:', coordinates);
 
-    const safeCategoryName = validation.category
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+      const watermarkedImage =
+        await addWatermarkToImage(imageData, {
+          appName: 'SEANANTA',
+          categoryName: category.name,
+          date: formattedDate,
+          time: watermarkTime,
+          locationText: watermarkLocation.trim(),
+          latitude: coordinates?.latitude,
+          longitude: coordinates?.longitude,
+          verificationText:
+            'SEANANTA menjamin keaslian waktu',
+        });
 
-    const fileName =
-      `${safeCategoryName || 'foto'}-${Date.now()}.jpg`;
+      console.log(
+        'Watermark berhasil dibuat:',
+        Boolean(watermarkedImage)
+      );
 
-    link.href = watermarkedImage;
-    link.download = fileName;
+      console.log(
+        'Panjang data foto setelah watermark:',
+        watermarkedImage.length
+      );
 
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      console.log(
+        'Foto asli dan watermark berbeda:',
+        imageData !== watermarkedImage
+      );
 
-    console.log('Download foto dijalankan:', fileName);
-    console.log('===== PROSES WATERMARK SELESAI =====');
+      await savePhoto(
+        watermarkedImage,
+        validation.category,
+        validation
+      );
 
-    setSaved(true);
+      console.log(
+        'Foto berhasil disimpan ke galeri lokal aplikasi'
+      );
 
-    window.setTimeout(() => {
-      navigate('/gallery', {
-        replace: true,
-      });
-    }, 1500);
-  } catch (error) {
-    console.error(
-      '===== PROSES WATERMARK GAGAL =====',
-      error
-    );
+      const link = document.createElement('a');
 
-    setSaveError(
-      'Foto gagal disimpan. Silakan periksa data watermark dan coba kembali.'
-    );
-  } finally {
-    setIsSaving(false);
-  }
-};
+      const safeCategoryName = validation.category
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+
+      const fileName =
+        `${safeCategoryName || 'foto'}-${Date.now()}.jpg`;
+
+      link.href = watermarkedImage;
+      link.download = fileName;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      console.log(
+        'Download foto dijalankan:',
+        fileName
+      );
+
+      console.log(
+        '===== PROSES WATERMARK SELESAI ====='
+      );
+
+      setSaved(true);
+
+      window.setTimeout(() => {
+        navigate('/gallery', {
+          replace: true,
+        });
+      }, 1500);
+    } catch (error) {
+      console.error(
+        '===== PROSES WATERMARK GAGAL =====',
+        error
+      );
+
+      setSaveError(
+        'Foto gagal disimpan. Silakan periksa data watermark dan coba kembali.'
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const getScoreColor = (score: number): string => {
     if (score >= 80) {
@@ -425,7 +550,7 @@ export const ValidationResultPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Form watermark manual */}
+          {/* Form watermark */}
           {validation.passed && (
             <div className="mt-6">
               <Card>
@@ -441,9 +566,8 @@ export const ValidationResultPage: React.FC = () => {
                       </h3>
 
                       <p className="text-sm text-slate-600 mt-1">
-                        Atur tanggal, jam, dan lokasi
-                        yang akan ditempel permanen pada
-                        foto saat disimpan.
+                        Data berikut akan ditempel permanen pada
+                        foto setelah validasi berhasil.
                       </p>
                     </div>
                   </div>
@@ -503,13 +627,13 @@ export const ValidationResultPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Lokasi manual */}
+                    {/* Alamat/lokasi */}
                     <div>
                       <label
                         htmlFor="watermark-location"
                         className="block text-sm font-medium text-slate-700 mb-1.5"
                       >
-                        Lokasi
+                        Alamat / Lokasi
                       </label>
 
                       <div className="relative">
@@ -524,49 +648,130 @@ export const ValidationResultPage: React.FC = () => {
                             );
                             setFormError('');
                           }}
-                          rows={3}
-                          maxLength={150}
-                          placeholder="Contoh: Workshop PT ABC, Kalasan, Sleman"
+                          rows={4}
+                          maxLength={300}
+                          placeholder="Contoh: Workshop PT ABC, Kalasan, Sleman, Daerah Istimewa Yogyakarta"
                           className="w-full resize-none rounded-xl border border-slate-300 bg-white pl-11 pr-3 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                         />
                       </div>
 
-                      <div className="flex justify-between mt-1.5">
+                      <div className="flex justify-between mt-1.5 gap-3">
                         <p className="text-xs text-slate-500">
-                          Lokasi dapat diisi secara manual.
+                          Alamat panjang akan otomatis menjadi beberapa baris pada watermark.
                         </p>
 
-                        <p className="text-xs text-slate-400">
-                          {watermarkLocation.length}/150
+                        <p className="text-xs text-slate-400 flex-shrink-0">
+                          {watermarkLocation.length}/300
                         </p>
                       </div>
                     </div>
+
+                    {/* Koordinat GPS */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                        Koordinat GPS
+                      </label>
+
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex items-start gap-3">
+                          <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                            <LocateFixed className="w-4 h-4 text-emerald-700" />
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-900 break-words">
+                              {formatCoordinatePreview(
+                                coordinates
+                              )}
+                            </p>
+
+                            <p className="text-xs text-slate-500 mt-1">
+                              Koordinat bersifat opsional. Jika diambil,
+                              koordinat akan tampil di bawah alamat pada watermark.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3">
+                          <Button
+                            variant="outline"
+                            fullWidth
+                            onClick={
+                              handleGetCurrentLocation
+                            }
+                            disabled={
+                              isGettingLocation ||
+                              isSaving
+                            }
+                            icon={
+                              <LocateFixed className="w-4 h-4" />
+                            }
+                          >
+                            {isGettingLocation
+                              ? 'Mengambil Lokasi GPS...'
+                              : coordinates
+                                ? 'Perbarui Lokasi GPS'
+                                : 'Ambil Lokasi GPS'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {locationError && (
+                        <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                          <p className="text-xs text-amber-800">
+                            {locationError}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Contoh watermark */}
-                  <div className="mt-5 rounded-xl bg-slate-900 p-4 text-white">
-                    <p className="text-xs font-medium uppercase tracking-wider text-slate-400 mb-2">
-                      Pratinjau teks watermark
-                    </p>
+                  {/* Preview watermark baru */}
+                  <div className="mt-5 overflow-hidden rounded-2xl bg-slate-800 p-4 text-white shadow-inner">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="rounded-lg bg-white px-3 py-1.5">
+                        <p className="text-3xl leading-none font-extrabold tracking-tight text-blue-900">
+                          {watermarkTime || '--:--'}
+                        </p>
+                      </div>
 
-                    <p className="font-bold">
-                      SEANANTA
-                    </p>
+                      <div className="text-right leading-tight">
+                        <p className="font-bold text-amber-400">
+                          SEANANTA
+                        </p>
+                        <p className="text-xs text-white/70 mt-1">
+                          Foto terverifikasi
+                        </p>
+                      </div>
+                    </div>
 
-                    <p className="text-sm mt-1">
-                    {formatDateToIndonesian(
-                      watermarkDate
-                     ) || 'Tanggal belum diisi'}
-                      {' '}
-                      {watermarkTime
-                    ? `${watermarkTime} WIB`
-                    : 'Jam belum diisi'}
-                   </p>
+                    <div className="relative mt-4 pl-4">
+                      <div className="absolute left-0 top-0 bottom-0 w-1 rounded-full bg-amber-400" />
 
-                    <p className="text-sm mt-1 break-words">
-                      {watermarkLocation.trim() ||
-                        'Lokasi belum diisi'}
-                    </p>
+                      <p className="font-bold text-base">
+                        {formatDateToIndonesian(
+                          watermarkDate
+                        ) || 'Tanggal belum diisi'}
+                      </p>
+
+                      <p className="text-sm mt-3 whitespace-pre-wrap break-words leading-relaxed">
+                        {watermarkLocation.trim() ||
+                          'Lokasi belum diisi'}
+                      </p>
+
+                      <p className="text-sm mt-3">
+                        {formatCoordinatePreview(
+                          coordinates
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 flex items-center gap-2 text-white/70">
+                      <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                      <p className="text-xs">
+                        SEANANTA menjamin keaslian waktu
+                      </p>
+                    </div>
                   </div>
 
                   {formError && (
