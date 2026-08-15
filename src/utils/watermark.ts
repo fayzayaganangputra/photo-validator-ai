@@ -113,11 +113,19 @@ export async function addWatermarkToImage(
         Math.round(referenceSize * 0.024)
       );
 
-      const maxTextWidth =
+      const availableTextWidth =
         width -
         marginLeft -
         marginRight -
         textOffsetFromLine;
+
+      // Batasi area alamat agar tidak terlalu melebar ke kanan.
+      // 68% dipilih agar alamat lebih cepat wrap seperti referensi.
+      const maxTextWidth =
+        Math.min(
+          availableTextWidth,
+          Math.round(width * 0.68)
+        );
 
       // =====================================================
       // DATA
@@ -1218,141 +1226,219 @@ function drawVerticalVerification(
   height: number,
   referenceSize: number
 ): void {
-  const codeFontSize =
-    Math.max(
-      14,
-      Math.round(
-        referenceSize * 0.022
-      )
-    );
+  const fontSize = Math.max(
+    14,
+    Math.round(referenceSize * 0.021)
+  );
 
-  const verifiedFontSize =
-    Math.max(
-      12,
-      Math.round(
-        referenceSize * 0.019
-      )
-    );
+  const rightMargin = Math.max(
+    12,
+    Math.round(width * 0.016)
+  );
 
-  const rightMargin =
-    Math.max(
-      14,
-      Math.round(
-        width * 0.018
-      )
-    );
+  const iconSize = Math.max(
+    13,
+    Math.round(referenceSize * 0.019)
+  );
 
-  const centerY =
-    Math.round(
-      height * 0.52
-    );
+  const gap = Math.max(
+    8,
+    Math.round(referenceSize * 0.011)
+  );
+
+  const normalizedCode =
+    code
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 14);
+
+  if (!normalizedCode) {
+    return;
+  }
+
+  const verifiedText =
+    'Timemark Verified';
 
   ctx.save();
 
-  // Pivot pada sisi kanan foto.
+  // Pivot kanan tengah.
+  // Setelah diputar, semua elemen tetap berada dalam SATU BARIS.
+  const pivotX =
+    width - rightMargin;
+
+  const pivotY =
+    Math.round(height * 0.52);
+
   ctx.translate(
-    width - rightMargin,
-    centerY
+    pivotX,
+    pivotY
   );
 
-  // Membaca dari bawah ke atas seperti watermark referensi.
+  // Dibaca dari bawah ke atas seperti referensi.
   ctx.rotate(
     -Math.PI / 2
   );
 
   ctx.textAlign =
-    'center';
+    'left';
 
   ctx.textBaseline =
     'middle';
 
   ctx.shadowColor =
-    'rgba(0,0,0,0.68)';
+    'rgba(0,0,0,0.62)';
 
   ctx.shadowBlur =
     Math.max(
       2,
-      Math.round(
-        referenceSize * 0.003
-      )
+      Math.round(referenceSize * 0.003)
     );
 
   ctx.shadowOffsetX = 1;
   ctx.shadowOffsetY = 1;
 
-  // =====================================================
-  // KODE
-  // =====================================================
   ctx.font =
-    `500 ${codeFontSize}px Arial, Helvetica, sans-serif`;
-
-  ctx.fillStyle =
-    'rgba(255,255,255,0.96)';
-
-  const normalizedCode =
-    code
-      .toUpperCase()
-      .replace(
-        /[^A-Z0-9]/g,
-        ''
-      )
-      .slice(
-        0,
-        14
-      );
-
-  ctx.fillText(
-    normalizedCode,
-    0,
-    0
-  );
-
-  // =====================================================
-  // TIMEMARK VERIFIED
-  // =====================================================
-  ctx.font =
-    `400 ${verifiedFontSize}px Arial, Helvetica, sans-serif`;
-
-  ctx.fillStyle =
-    'rgba(255,255,255,0.94)';
-
-  ctx.fillText(
-    'Timemark Verified',
-    0,
-    -(
-      codeFontSize *
-      1.55
-    )
-  );
-
-  // =====================================================
-  // SHIELD KECIL DI DEPAN KODE
-  // =====================================================
-  ctx.font =
-    `500 ${codeFontSize}px Arial, Helvetica, sans-serif`;
+    `400 ${fontSize}px Arial, Helvetica, sans-serif`;
 
   const codeWidth =
     ctx.measureText(
       normalizedCode
     ).width;
 
-  const shieldSize =
+  const verifiedWidth =
+    ctx.measureText(
+      verifiedText
+    ).width;
+
+  const totalWidth =
+    iconSize +
+    gap +
+    codeWidth +
+    gap +
+    verifiedWidth;
+
+  // Center seluruh rangkaian:
+  // [icon] CODE Timemark Verified
+  const startX =
+    -(totalWidth / 2);
+
+  // =====================================================
+  // ICON VERIFIKASI
+  // =====================================================
+  drawVerificationCircleIcon(
+    ctx,
+    startX,
+    0,
+    iconSize
+  );
+
+  let currentX =
+    startX +
+    iconSize +
+    gap;
+
+  // =====================================================
+  // KODE
+  // =====================================================
+  ctx.fillStyle =
+    'rgba(255,255,255,0.98)';
+
+  ctx.font =
+    `400 ${fontSize}px Arial, Helvetica, sans-serif`;
+
+  ctx.fillText(
+    normalizedCode,
+    currentX,
+    0
+  );
+
+  currentX +=
+    codeWidth +
+    gap;
+
+  // =====================================================
+  // TIMEMARK VERIFIED
+  // SATU BARIS DENGAN KODE
+  // =====================================================
+  ctx.fillStyle =
+    'rgba(255,255,255,0.93)';
+
+  ctx.fillText(
+    verifiedText,
+    currentX,
+    0
+  );
+
+  ctx.restore();
+}
+
+// =====================================================
+// ICON VERIFIKASI KECIL
+// =====================================================
+function drawVerificationCircleIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  centerY: number,
+  size: number
+): void {
+  ctx.save();
+
+  const centerX =
+    x + size / 2;
+
+  const radius =
+    size * 0.42;
+
+  ctx.strokeStyle =
+    'rgba(255,255,255,0.92)';
+
+  ctx.lineWidth =
     Math.max(
-      11,
-      Math.round(
-        verifiedFontSize * 0.95
-      )
+      1.5,
+      size * 0.1
     );
 
-  drawShieldIcon(
-    ctx,
-    -(
-      codeWidth / 2 +
-      shieldSize * 1.7
-    ),
-    -shieldSize / 2,
-    shieldSize
+  ctx.lineCap =
+    'round';
+
+  ctx.lineJoin =
+    'round';
+
+  ctx.shadowColor =
+    'rgba(0,0,0,0.45)';
+
+  ctx.shadowBlur = 2;
+
+  ctx.beginPath();
+
+  ctx.arc(
+    centerX,
+    centerY,
+    radius,
+    0,
+    Math.PI * 2
   );
+
+  ctx.stroke();
+
+  ctx.beginPath();
+
+  ctx.moveTo(
+    centerX - radius * 0.45,
+    centerY
+  );
+
+  ctx.lineTo(
+    centerX - radius * 0.1,
+    centerY + radius * 0.35
+  );
+
+  ctx.lineTo(
+    centerX + radius * 0.5,
+    centerY - radius * 0.35
+  );
+
+  ctx.stroke();
 
   ctx.restore();
 }
