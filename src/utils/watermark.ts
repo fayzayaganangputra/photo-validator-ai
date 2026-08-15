@@ -9,6 +9,7 @@ export interface WatermarkOptions {
   longitude?: number | string;
 
   verificationText?: string;
+  verificationCode?: string;
 }
 
 export async function addWatermarkToImage(
@@ -18,7 +19,7 @@ export async function addWatermarkToImage(
   return new Promise((resolve, reject) => {
     const image = new Image();
 
-    image.onload = () => {
+    image.onload = async () => {
       const canvas = document.createElement('canvas');
 
       canvas.width = image.naturalWidth || image.width;
@@ -137,6 +138,21 @@ export async function addWatermarkToImage(
       const verificationText =
         options.verificationText?.trim() ||
         `${appName} menjamin keaslian waktu`;
+
+      // Kode verifikasi dibuat otomatis secara lokal/offline.
+      // Jika verificationCode dikirim dari luar, nilai tersebut dipakai.
+      const verificationCode =
+        options.verificationCode?.trim() ||
+        await generateLocalVerificationCode(
+          imageData,
+          {
+            date,
+            time,
+            latitude: options.latitude,
+            longitude: options.longitude,
+            categoryName: options.categoryName,
+          }
+        );
 
       const coordinates =
         formatCoordinates(
@@ -580,6 +596,19 @@ export async function addWatermarkToImage(
         brandFontSize,
         brandSubFontSize
       );
+
+      // =====================================================
+      // KODE VERIFIKASI VERTIKAL KANAN
+      // =====================================================
+      if (verificationCode) {
+        drawVerticalVerification(
+          ctx,
+          verificationCode,
+          width,
+          height,
+          referenceSize
+        );
+      }
 
       ctx.restore();
 
@@ -1030,6 +1059,299 @@ function drawTimeMarkBrand(
       Math.round(
         fontSize * 1.18
       )
+  );
+
+  ctx.restore();
+}
+
+// =====================================================
+// GENERATE KODE VERIFIKASI OFFLINE
+// Format: 14 karakter A-Z / 0-9
+// Dibuat dari foto asli + tanggal + jam + koordinat + kategori.
+// Tidak membutuhkan database atau koneksi internet.
+// =====================================================
+interface VerificationCodeSource {
+  date: string;
+  time: string;
+  latitude?: number | string;
+  longitude?: number | string;
+  categoryName?: string;
+}
+
+async function generateLocalVerificationCode(
+  imageData: string,
+  source: VerificationCodeSource
+): Promise<string> {
+  const rawData = [
+    imageData,
+    source.date,
+    source.time,
+    source.latitude ?? '',
+    source.longitude ?? '',
+    source.categoryName ?? '',
+  ].join('|');
+
+  try {
+    if (
+      typeof crypto !== 'undefined' &&
+      crypto.subtle &&
+      typeof TextEncoder !== 'undefined'
+    ) {
+      const encoded = new TextEncoder().encode(rawData);
+
+      const hashBuffer =
+        await crypto.subtle.digest(
+          'SHA-256',
+          encoded
+        );
+
+      const bytes =
+        new Uint8Array(hashBuffer);
+
+      return bytesToVerificationCode(bytes);
+    }
+  } catch (error) {
+    console.warn(
+      'SHA-256 tidak tersedia, menggunakan fallback verification code:',
+      error
+    );
+  }
+
+  // Fallback untuk browser lama.
+  // Tetap deterministik dan tetap dapat berjalan offline.
+  return generateFallbackVerificationCode(rawData);
+}
+
+function bytesToVerificationCode(
+  bytes: Uint8Array
+): string {
+  const alphabet =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+  let code = '';
+
+  for (let index = 0; index < 14; index += 1) {
+    const byte =
+      bytes[index % bytes.length];
+
+    code +=
+      alphabet[
+        byte % alphabet.length
+      ];
+  }
+
+  return code;
+}
+
+function generateFallbackVerificationCode(
+  value: string
+): string {
+  const alphabet =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+  let hashA = 2166136261 >>> 0;
+  let hashB = 2246822519 >>> 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const charCode =
+      value.charCodeAt(index);
+
+    hashA ^= charCode;
+    hashA =
+      Math.imul(
+        hashA,
+        16777619
+      ) >>> 0;
+
+    hashB ^=
+      charCode +
+      index;
+
+    hashB =
+      Math.imul(
+        hashB,
+        3266489917
+      ) >>> 0;
+  }
+
+  let code = '';
+
+  for (let index = 0; index < 14; index += 1) {
+    hashA =
+      Math.imul(
+        hashA ^ (hashA >>> 13),
+        1274126177
+      ) >>> 0;
+
+    hashB =
+      Math.imul(
+        hashB ^ (hashB >>> 16),
+        2246822519
+      ) >>> 0;
+
+    const mixed =
+      (hashA ^
+        hashB ^
+        (index * 2654435761)) >>> 0;
+
+    code +=
+      alphabet[
+        mixed % alphabet.length
+      ];
+  }
+
+  return code;
+}
+
+// =====================================================
+// KODE VERIFIKASI VERTIKAL DI SISI KANAN
+// Tampilan:
+//   [shield] GUK4YCT34YXN6A
+//            Timemark Verified
+//
+// Keseluruhan diputar vertikal seperti referensi.
+// =====================================================
+function drawVerticalVerification(
+  ctx: CanvasRenderingContext2D,
+  code: string,
+  width: number,
+  height: number,
+  referenceSize: number
+): void {
+  const codeFontSize =
+    Math.max(
+      14,
+      Math.round(
+        referenceSize * 0.022
+      )
+    );
+
+  const verifiedFontSize =
+    Math.max(
+      12,
+      Math.round(
+        referenceSize * 0.019
+      )
+    );
+
+  const rightMargin =
+    Math.max(
+      14,
+      Math.round(
+        width * 0.018
+      )
+    );
+
+  const centerY =
+    Math.round(
+      height * 0.52
+    );
+
+  ctx.save();
+
+  // Pivot pada sisi kanan foto.
+  ctx.translate(
+    width - rightMargin,
+    centerY
+  );
+
+  // Membaca dari bawah ke atas seperti watermark referensi.
+  ctx.rotate(
+    -Math.PI / 2
+  );
+
+  ctx.textAlign =
+    'center';
+
+  ctx.textBaseline =
+    'middle';
+
+  ctx.shadowColor =
+    'rgba(0,0,0,0.68)';
+
+  ctx.shadowBlur =
+    Math.max(
+      2,
+      Math.round(
+        referenceSize * 0.003
+      )
+    );
+
+  ctx.shadowOffsetX = 1;
+  ctx.shadowOffsetY = 1;
+
+  // =====================================================
+  // KODE
+  // =====================================================
+  ctx.font =
+    `500 ${codeFontSize}px Arial, Helvetica, sans-serif`;
+
+  ctx.fillStyle =
+    'rgba(255,255,255,0.96)';
+
+  const normalizedCode =
+    code
+      .toUpperCase()
+      .replace(
+        /[^A-Z0-9]/g,
+        ''
+      )
+      .slice(
+        0,
+        14
+      );
+
+  ctx.fillText(
+    normalizedCode,
+    0,
+    0
+  );
+
+  // =====================================================
+  // TIMEMARK VERIFIED
+  // =====================================================
+  ctx.font =
+    `400 ${verifiedFontSize}px Arial, Helvetica, sans-serif`;
+
+  ctx.fillStyle =
+    'rgba(255,255,255,0.94)';
+
+  ctx.fillText(
+    'Timemark Verified',
+    0,
+    -(
+      codeFontSize *
+      1.55
+    )
+  );
+
+  // =====================================================
+  // SHIELD KECIL DI DEPAN KODE
+  // =====================================================
+  ctx.font =
+    `500 ${codeFontSize}px Arial, Helvetica, sans-serif`;
+
+  const codeWidth =
+    ctx.measureText(
+      normalizedCode
+    ).width;
+
+  const shieldSize =
+    Math.max(
+      11,
+      Math.round(
+        verifiedFontSize * 0.95
+      )
+    );
+
+  drawShieldIcon(
+    ctx,
+    -(
+      codeWidth / 2 +
+      shieldSize * 1.7
+    ),
+    -shieldSize / 2,
+    shieldSize
   );
 
   ctx.restore();

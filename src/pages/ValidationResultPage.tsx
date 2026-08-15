@@ -150,6 +150,72 @@ const formatCoordinatePreview = (
   ).toFixed(6)}°${lngDirection}`;
 };
 
+
+const generateVerificationCodePreview = async (
+  imageData: string,
+  data: {
+    date: string;
+    time: string;
+    latitude?: number;
+    longitude?: number;
+    categoryName?: string;
+  }
+): Promise<string> => {
+  const raw = [
+    data.date,
+    data.time,
+    data.latitude ?? '',
+    data.longitude ?? '',
+    data.categoryName ?? '',
+    imageData.slice(-1000),
+  ].join('|');
+
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+  if (window.crypto?.subtle) {
+    const encoded = new TextEncoder().encode(raw);
+
+    const hashBuffer = await window.crypto.subtle.digest(
+      'SHA-256',
+      encoded
+    );
+
+    const bytes = new Uint8Array(hashBuffer);
+
+    let code = '';
+
+    for (let index = 0; index < 14; index += 1) {
+      code += alphabet[
+        bytes[index % bytes.length] % alphabet.length
+      ];
+    }
+
+    return code;
+  }
+
+  // Fallback sederhana jika Web Crypto tidak tersedia.
+  let hash = 2166136261;
+
+  for (let index = 0; index < raw.length; index += 1) {
+    hash ^= raw.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  let fallbackCode = '';
+  let seed = hash >>> 0;
+
+  for (let index = 0; index < 14; index += 1) {
+    seed =
+      (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+
+    fallbackCode += alphabet[
+      seed % alphabet.length
+    ];
+  }
+
+  return fallbackCode;
+};
+
 export const ValidationResultPage: React.FC = () => {
   const { categoryId } = useParams<{
     categoryId: string;
@@ -199,6 +265,8 @@ export const ValidationResultPage: React.FC = () => {
   const [formError, setFormError] = useState('');
   const [saveError, setSaveError] = useState('');
 
+  const [verificationCode, setVerificationCode] = useState('');
+
   const category = CATEGORIES.find(
     (item) => item.id === categoryId
   );
@@ -226,6 +294,8 @@ export const ValidationResultPage: React.FC = () => {
   }
 
   const handleRetake = (): void => {
+    setVerificationCode('');
+
     navigate(`/capture/${categoryId}`, {
       replace: true,
     });
@@ -463,6 +533,25 @@ export const ValidationResultPage: React.FC = () => {
       console.log('Lokasi:', watermarkLocation.trim());
       console.log('Koordinat:', coordinates);
 
+      const generatedVerificationCode =
+        await generateVerificationCodePreview(
+          imageData,
+          {
+            date: formattedDate,
+            time: watermarkTime,
+            latitude: coordinates?.latitude,
+            longitude: coordinates?.longitude,
+            categoryName: category.name,
+          }
+        );
+
+      setVerificationCode(generatedVerificationCode);
+
+      console.log(
+        'Verification code:',
+        generatedVerificationCode
+      );
+
       const watermarkedImage =
         await addWatermarkToImage(imageData, {
           appName: 'Timemark',
@@ -472,6 +561,8 @@ export const ValidationResultPage: React.FC = () => {
           locationText: watermarkLocation.trim(),
           latitude: coordinates?.latitude,
           longitude: coordinates?.longitude,
+          verificationCode:
+            generatedVerificationCode,
         });
 
       console.log(
@@ -974,6 +1065,27 @@ export const ValidationResultPage: React.FC = () => {
                       <p className="text-xs">
                         Timemark menjamin keaslian waktu
                       </p>
+                    </div>
+
+                    <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
+                      <p className="text-[11px] uppercase tracking-wider text-white/50">
+                        Kode verifikasi
+                      </p>
+
+                      <div className="mt-1 flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-white/70 flex-shrink-0" />
+
+                        <div>
+                          <p className="font-mono text-sm tracking-widest text-white">
+                            {verificationCode ||
+                              'Dibuat otomatis saat foto disimpan'}
+                          </p>
+
+                          <p className="text-[11px] text-white/60 mt-0.5">
+                            Timemark Verified
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
