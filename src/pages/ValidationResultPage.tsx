@@ -44,6 +44,12 @@ interface Coordinates {
   longitude: number;
 }
 
+type AddressMode = 'auto' | 'manual';
+
+interface NominatimReverseResponse {
+  display_name?: string;
+}
+
 const getCurrentDateInput = (): string => {
   const now = new Date();
 
@@ -175,10 +181,16 @@ export const ValidationResultPage: React.FC = () => {
   const [watermarkLocation, setWatermarkLocation] =
     useState('');
 
+  const [addressMode, setAddressMode] =
+    useState<AddressMode>('manual');
+
   const [coordinates, setCoordinates] =
     useState<Coordinates | null>(null);
 
   const [isGettingLocation, setIsGettingLocation] =
+    useState(false);
+
+  const [isGeneratingAddress, setIsGeneratingAddress] =
     useState(false);
 
   const [locationError, setLocationError] =
@@ -219,55 +231,184 @@ export const ValidationResultPage: React.FC = () => {
     });
   };
 
-  const handleGetCurrentLocation = (): void => {
-    setLocationError('');
+  const getCurrentPosition = (): Promise<GeolocationPosition> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(
+          new Error(
+            'Perangkat atau browser ini tidak mendukung GPS/geolocation.'
+          )
+        );
+        return;
+      }
 
-    if (!navigator.geolocation) {
-      setLocationError(
-        'Perangkat atau browser ini tidak mendukung GPS/geolocation.'
+      navigator.geolocation.getCurrentPosition(
+        resolve,
+        reject,
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0,
+        }
       );
+    });
+  };
+
+  const getGeolocationErrorMessage = (
+    error: unknown
+  ): string => {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error
+    ) {
+      const code = Number(
+        (error as { code?: number }).code
+      );
+
+      // GeolocationPositionError:
+      // 1 = PERMISSION_DENIED
+      // 2 = POSITION_UNAVAILABLE
+      // 3 = TIMEOUT
+      if (code === 1) {
+        return 'Izin lokasi ditolak. Aktifkan izin lokasi untuk PWA/browser lalu coba lagi.';
+      }
+
+      if (code === 2) {
+        return 'Posisi GPS tidak tersedia saat ini. Coba pindah ke area dengan sinyal lokasi lebih baik.';
+      }
+
+      if (code === 3) {
+        return 'Pengambilan lokasi terlalu lama. Silakan coba lagi.';
+      }
+    }
+
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+
+    return 'Lokasi GPS tidak dapat diambil. Pastikan izin lokasi aktif.';
+  };
+
+  const handleGetCurrentLocation = async (): Promise<void> => {
+    if (isGettingLocation || isGeneratingAddress) {
       return;
     }
 
+    setLocationError('');
     setIsGettingLocation(true);
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setCoordinates({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
+    try {
+      const position = await getCurrentPosition();
 
-        setLocationError('');
-        setIsGettingLocation(false);
-      },
-      (error) => {
-        console.error('Geolocation error:', error);
+      setCoordinates({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      });
 
-        let message =
-          'Lokasi GPS tidak dapat diambil. Pastikan izin lokasi aktif.';
-
-        if (error.code === error.PERMISSION_DENIED) {
-          message =
-            'Izin lokasi ditolak. Aktifkan izin lokasi untuk PWA/browser lalu coba lagi.';
-        } else if (error.code === error.POSITION_UNAVAILABLE) {
-          message =
-            'Posisi GPS tidak tersedia saat ini. Coba pindah ke area dengan sinyal lokasi lebih baik.';
-        } else if (error.code === error.TIMEOUT) {
-          message =
-            'Pengambilan lokasi terlalu lama. Silakan coba lagi.';
-        }
-
-        setLocationError(message);
-        setIsGettingLocation(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      }
-    );
+      setLocationError('');
+    } catch (error) {
+      console.error('Geolocation error:', error);
+      setLocationError(
+        getGeolocationErrorMessage(error)
+      );
+    } finally {
+      setIsGettingLocation(false);
+    }
   };
+
+  const handleGenerateAddress = async (): Promise<void> => {
+    if (isGeneratingAddress || isGettingLocation) {
+      return;
+    }
+
+    setAddressMode('auto');
+    setLocationError('');
+    setFormError('');
+    setIsGeneratingAddress(true);
+
+    try {
+      const position = await getCurrentPosition();
+
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
+
+      setCoordinates({
+        latitude,
+        longitude,
+      });
+
+      if (!navigator.onLine) {
+        setAddressMode('manual');
+        setLocationError(
+          'Koordinat GPS berhasil diambil, tetapi perangkat sedang offline. Silakan tulis alamat secara manual.'
+        );
+        return;
+      }
+
+      const params = new URLSearchParams({
+        format: 'jsonv2',
+        lat: String(latitude),
+        lon: String(longitude),
+        addressdetails: '1',
+        'accept-language': 'id',
+      });
+
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?${params.toString()}`,
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Reverse geocoding gagal (${response.status}).`
+        );
+      }
+
+      const data =
+        (await response.json()) as NominatimReverseResponse;
+
+      const generatedAddress =
+        data.display_name?.trim() || '';
+
+      if (!generatedAddress) {
+        setAddressMode('manual');
+        setLocationError(
+          'Alamat otomatis tidak ditemukan. Koordinat GPS tetap tersimpan, silakan tulis alamat secara manual.'
+        );
+        return;
+      }
+
+      setWatermarkLocation(generatedAddress);
+      setAddressMode('auto');
+      setLocationError('');
+    } catch (error) {
+      console.error(
+        'Generate alamat otomatis gagal:',
+        error
+      );
+
+      setAddressMode('manual');
+
+      if (error instanceof TypeError) {
+        setLocationError(
+          'Alamat otomatis gagal diambil. Periksa koneksi internet lalu coba lagi, atau tulis alamat secara manual.'
+        );
+      } else {
+        setLocationError(
+          getGeolocationErrorMessage(error)
+        );
+      }
+    } finally {
+      setIsGeneratingAddress(false);
+    }
+  };
+
 
   const validateWatermarkForm = (): boolean => {
     if (!watermarkDate) {
@@ -324,15 +465,13 @@ export const ValidationResultPage: React.FC = () => {
 
       const watermarkedImage =
         await addWatermarkToImage(imageData, {
-          appName: 'SEANANTA',
+          appName: 'Timemark',
           categoryName: category.name,
           date: formattedDate,
           time: watermarkTime,
           locationText: watermarkLocation.trim(),
           latitude: coordinates?.latitude,
           longitude: coordinates?.longitude,
-          verificationText:
-            'SEANANTA menjamin keaslian waktu',
         });
 
       console.log(
@@ -636,6 +775,46 @@ export const ValidationResultPage: React.FC = () => {
                         Alamat / Lokasi
                       </label>
 
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <button
+                          type="button"
+                          onClick={handleGenerateAddress}
+                          disabled={
+                            isGeneratingAddress ||
+                            isGettingLocation ||
+                            isSaving
+                          }
+                          className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
+                            addressMode === 'auto'
+                              ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-100'
+                              : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                          } disabled:cursor-not-allowed disabled:opacity-60`}
+                        >
+                          {isGeneratingAddress
+                            ? 'Mencari Alamat...'
+                            : 'Generate Otomatis'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddressMode('manual');
+                            setLocationError('');
+                          }}
+                          disabled={
+                            isGeneratingAddress ||
+                            isSaving
+                          }
+                          className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
+                            addressMode === 'manual'
+                              ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-100'
+                              : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                          } disabled:cursor-not-allowed disabled:opacity-60`}
+                        >
+                          Tulis Manual
+                        </button>
+                      </div>
+
                       <div className="relative">
                         <MapPin className="absolute left-3 top-3.5 w-5 h-5 text-slate-400 pointer-events-none" />
 
@@ -646,18 +825,25 @@ export const ValidationResultPage: React.FC = () => {
                             setWatermarkLocation(
                               event.target.value
                             );
+                            setAddressMode('manual');
                             setFormError('');
                           }}
                           rows={4}
                           maxLength={300}
-                          placeholder="Contoh: Workshop PT ABC, Kalasan, Sleman, Daerah Istimewa Yogyakarta"
+                          placeholder={
+                            addressMode === 'auto'
+                              ? 'Tekan Generate Otomatis untuk mencari alamat dari GPS...'
+                              : 'Contoh: Workshop PT ABC, Kalasan, Sleman, Daerah Istimewa Yogyakarta'
+                          }
                           className="w-full resize-none rounded-xl border border-slate-300 bg-white pl-11 pr-3 py-3 text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                         />
                       </div>
 
                       <div className="flex justify-between mt-1.5 gap-3">
                         <p className="text-xs text-slate-500">
-                          Alamat panjang akan otomatis menjadi beberapa baris pada watermark.
+                          {addressMode === 'auto'
+                            ? 'Alamat dibuat dari posisi GPS dan tetap dapat diedit jika kurang tepat.'
+                            : 'Isi alamat secara manual. Alamat panjang otomatis menjadi beberapa baris pada watermark.'}
                         </p>
 
                         <p className="text-xs text-slate-400 flex-shrink-0">
@@ -701,6 +887,7 @@ export const ValidationResultPage: React.FC = () => {
                             }
                             disabled={
                               isGettingLocation ||
+                              isGeneratingAddress ||
                               isSaving
                             }
                             icon={
@@ -729,18 +916,34 @@ export const ValidationResultPage: React.FC = () => {
                   {/* Preview watermark baru */}
                   <div className="mt-5 overflow-hidden rounded-2xl bg-slate-800 p-4 text-white shadow-inner">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="rounded-lg bg-white px-3 py-1.5">
-                        <p className="text-3xl leading-none font-extrabold tracking-tight text-blue-900">
+                      <div className="rounded-xl bg-white px-3 py-2">
+                        <p
+                          className="text-3xl leading-none font-extrabold tracking-tight"
+                          style={{
+                            background:
+                              'linear-gradient(to bottom, #0B67D1 0%, #064B9E 42%, #062B5A 72%, #061426 100%)',
+                            WebkitBackgroundClip: 'text',
+                            backgroundClip: 'text',
+                            color: 'transparent',
+                            transform: 'translateY(2px)',
+                          }}
+                        >
                           {watermarkTime || '--:--'}
                         </p>
                       </div>
 
                       <div className="text-right leading-tight">
-                        <p className="font-bold text-amber-400">
-                          SEANANTA
+                        <p className="font-bold text-lg leading-none">
+                          <span className="text-amber-400">
+                            Time
+                          </span>
+                          <span className="text-white">
+                            mark
+                          </span>
                         </p>
-                        <p className="text-xs text-white/70 mt-1">
-                          Foto terverifikasi
+
+                        <p className="text-xs text-white/90 mt-1">
+                          Foto 100% akurat
                         </p>
                       </div>
                     </div>
@@ -769,7 +972,7 @@ export const ValidationResultPage: React.FC = () => {
                     <div className="mt-4 flex items-center gap-2 text-white/70">
                       <CheckCircle className="w-4 h-4 flex-shrink-0" />
                       <p className="text-xs">
-                        SEANANTA menjamin keaslian waktu
+                        Timemark menjamin keaslian waktu
                       </p>
                     </div>
                   </div>
