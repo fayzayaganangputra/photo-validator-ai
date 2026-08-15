@@ -44,7 +44,11 @@ export async function addWatermarkToImage(
 
       const width = canvas.width;
       const height = canvas.height;
-      const referenceSize = Math.min(width, height);
+
+      const referenceSize = Math.min(
+        width,
+        height
+      );
 
       // =====================================================
       // UKURAN RESPONSIVE
@@ -90,13 +94,13 @@ export async function addWatermarkToImage(
       );
 
       const brandFontSize = Math.max(
-        18,
-        Math.round(referenceSize * 0.032)
+        22,
+        Math.round(referenceSize * 0.04)
       );
 
       const brandSubFontSize = Math.max(
-        13,
-        Math.round(referenceSize * 0.02)
+        14,
+        Math.round(referenceSize * 0.021)
       );
 
       const lineHeight = Math.round(
@@ -118,7 +122,8 @@ export async function addWatermarkToImage(
       // DATA
       // =====================================================
       const appName =
-        options.appName?.trim() || 'SEANANTA';
+        options.appName?.trim() ||
+        'Timemark';
 
       const date =
         options.date?.trim() || '';
@@ -160,13 +165,19 @@ export async function addWatermarkToImage(
         `800 ${timeFontSize}px Arial, Helvetica, sans-serif`;
 
       const measuredTimeWidth =
-        ctx.measureText(time || '00:00').width;
+        ctx.measureText(
+          time || '00:00'
+        ).width;
 
       const timeHorizontalPadding =
-        Math.round(timeFontSize * 0.32);
+        Math.round(
+          timeFontSize * 0.32
+        );
 
       const timeVerticalPadding =
-        Math.round(timeFontSize * 0.18);
+        Math.round(
+          timeFontSize * 0.18
+        );
 
       const timeBoxWidth =
         measuredTimeWidth +
@@ -179,37 +190,54 @@ export async function addWatermarkToImage(
       const timeBoxRadius =
         Math.max(
           12,
-          Math.round(timeBoxHeight * 0.16)
+          Math.round(
+            timeBoxHeight * 0.16
+          )
         );
 
       // =====================================================
       // JARAK ANTAR BAGIAN
       // =====================================================
       const gapAfterTime =
-        Math.round(referenceSize * 0.02);
+        Math.round(
+          referenceSize * 0.02
+        );
 
       const gapAfterDate =
-        Math.round(referenceSize * 0.018);
+        Math.round(
+          referenceSize * 0.018
+        );
 
       const gapAfterLocation =
-        Math.round(referenceSize * 0.02);
+        Math.round(
+          referenceSize * 0.02
+        );
 
       const gapBeforeVerification =
-        Math.round(referenceSize * 0.025);
+        Math.round(
+          referenceSize * 0.025
+        );
 
       const dateHeight =
-        Math.round(dateFontSize * 1.25);
+        Math.round(
+          dateFontSize * 1.25
+        );
 
       const locationHeight =
-        locationLines.length * lineHeight;
+        locationLines.length *
+        lineHeight;
 
       const coordinateHeight =
         coordinates
-          ? Math.round(coordinateFontSize * 1.3)
+          ? Math.round(
+              coordinateFontSize * 1.3
+            )
           : 0;
 
       const verificationHeight =
-        Math.round(verificationFontSize * 1.35);
+        Math.round(
+          verificationFontSize * 1.35
+        );
 
       const contentHeight =
         timeBoxHeight +
@@ -227,9 +255,10 @@ export async function addWatermarkToImage(
         marginBottom -
         contentHeight;
 
-      // Jangan sampai watermark terlalu naik pada foto kecil.
       const minimumTop =
-        Math.round(height * 0.12);
+        Math.round(
+          height * 0.12
+        );
 
       if (startY < minimumTop) {
         startY = minimumTop;
@@ -238,8 +267,11 @@ export async function addWatermarkToImage(
       // =====================================================
       // KOTAK JAM
       // =====================================================
-      const timeBoxX = marginLeft;
-      const timeBoxY = startY;
+      const timeBoxX =
+        marginLeft;
+
+      const timeBoxY =
+        startY;
 
       ctx.save();
 
@@ -252,21 +284,26 @@ export async function addWatermarkToImage(
         timeBoxRadius
       );
 
-      // Background putih seperti contoh.
-      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.fillStyle =
+        'rgba(255,255,255,0.97)';
+
       ctx.fill();
 
-      // Border sangat tipis supaya tetap terlihat pada background terang.
-      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-      ctx.lineWidth = Math.max(
-        1,
-        Math.round(referenceSize * 0.0015)
-      );
+      ctx.strokeStyle =
+        'rgba(255,255,255,0.78)';
+
+      ctx.lineWidth =
+        Math.max(
+          1,
+          Math.round(
+            referenceSize * 0.0015
+          )
+        );
+
       ctx.stroke();
 
       // =====================================================
-      // JAM: GRADASI BIRU -> NAVY/HITAM
-      // DAN POSISI BENAR-BENAR CENTER
+      // JAM GRADIENT
       // =====================================================
       const timeGradient =
         ctx.createLinearGradient(
@@ -296,30 +333,51 @@ export async function addWatermarkToImage(
         '#061426'
       );
 
-      ctx.fillStyle = timeGradient;
+      ctx.fillStyle =
+        timeGradient;
 
       ctx.font =
         `800 ${timeFontSize}px Arial, Helvetica, sans-serif`;
 
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      ctx.textAlign =
+        'center';
 
-      // Tidak menggunakan shadow agar gradient tetap clean.
-      ctx.shadowColor = 'transparent';
+      ctx.textBaseline =
+        'middle';
+
+      // Tidak menggunakan shadow pada angka
+      ctx.shadowColor =
+        'transparent';
+
       ctx.shadowBlur = 0;
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
 
+      // =====================================================
+      // OFFSET OPTIK
+      // Angka diturunkan sedikit agar terlihat benar-benar center
+      // =====================================================
+      const timeVerticalOffset =
+        Math.max(
+          2,
+          Math.round(
+            timeBoxHeight * 0.045
+          )
+        );
+
       ctx.fillText(
         time || '--:--',
-        timeBoxX + timeBoxWidth / 2,
-        timeBoxY + timeBoxHeight / 2
+        timeBoxX +
+          timeBoxWidth / 2,
+        timeBoxY +
+          timeBoxHeight / 2 +
+          timeVerticalOffset
       );
 
       ctx.restore();
 
       // =====================================================
-      // KONTEN UTAMA
+      // KONTEN SETELAH JAM
       // =====================================================
       let currentY =
         timeBoxY +
@@ -334,11 +392,13 @@ export async function addWatermarkToImage(
         textOffsetFromLine;
 
       // =====================================================
-      // GARIS KUNING VERTIKAL
+      // GARIS KUNING
       // =====================================================
       const yellowLineTop =
         currentY -
-        Math.round(dateFontSize * 0.08);
+        Math.round(
+          dateFontSize * 0.08
+        );
 
       const yellowLineBottom =
         currentY +
@@ -347,20 +407,27 @@ export async function addWatermarkToImage(
         locationHeight +
         gapAfterLocation +
         coordinateHeight -
-        Math.round(mainFontSize * 0.15);
+        Math.round(
+          mainFontSize * 0.15
+        );
 
       ctx.save();
 
       ctx.beginPath();
 
-      ctx.strokeStyle = '#FFC72C';
+      ctx.strokeStyle =
+        '#FFC72C';
 
-      ctx.lineWidth = Math.max(
-        4,
-        Math.round(referenceSize * 0.006)
-      );
+      ctx.lineWidth =
+        Math.max(
+          4,
+          Math.round(
+            referenceSize * 0.006
+          )
+        );
 
-      ctx.lineCap = 'butt';
+      ctx.lineCap =
+        'butt';
 
       ctx.moveTo(
         yellowLineX,
@@ -377,7 +444,7 @@ export async function addWatermarkToImage(
       ctx.restore();
 
       // =====================================================
-      // SHADOW UNTUK TEKS PUTIH
+      // SHADOW TEKS PUTIH
       // =====================================================
       ctx.shadowColor =
         'rgba(0,0,0,0.68)';
@@ -385,19 +452,25 @@ export async function addWatermarkToImage(
       ctx.shadowBlur =
         Math.max(
           2,
-          Math.round(referenceSize * 0.004)
+          Math.round(
+            referenceSize * 0.004
+          )
         );
 
       ctx.shadowOffsetX = 1;
       ctx.shadowOffsetY = 1;
 
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
+      ctx.textAlign =
+        'left';
+
+      ctx.textBaseline =
+        'top';
 
       // =====================================================
       // TANGGAL
       // =====================================================
-      ctx.fillStyle = '#FFFFFF';
+      ctx.fillStyle =
+        '#FFFFFF';
 
       ctx.font =
         `700 ${dateFontSize}px Arial, Helvetica, sans-serif`;
@@ -419,16 +492,19 @@ export async function addWatermarkToImage(
       ctx.font =
         `400 ${mainFontSize}px Arial, Helvetica, sans-serif`;
 
-      locationLines.forEach((line) => {
-        ctx.fillText(
-          line,
-          textX,
-          currentY,
-          maxTextWidth
-        );
+      locationLines.forEach(
+        (line) => {
+          ctx.fillText(
+            line,
+            textX,
+            currentY,
+            maxTextWidth
+          );
 
-        currentY += lineHeight;
-      });
+          currentY +=
+            lineHeight;
+        }
+      );
 
       currentY +=
         gapAfterLocation;
@@ -448,14 +524,16 @@ export async function addWatermarkToImage(
         );
 
         currentY +=
-          Math.round(coordinateFontSize * 1.3);
+          Math.round(
+            coordinateFontSize * 1.3
+          );
       }
 
       currentY +=
         gapBeforeVerification;
 
       // =====================================================
-      // VERIFICATION BAR
+      // VERIFICATION TEXT
       // =====================================================
       ctx.shadowColor =
         'rgba(0,0,0,0.48)';
@@ -482,7 +560,9 @@ export async function addWatermarkToImage(
         verificationText,
         marginLeft +
           shieldSize +
-          Math.round(referenceSize * 0.012),
+          Math.round(
+            referenceSize * 0.012
+          ),
         currentY,
         width -
           marginLeft -
@@ -491,11 +571,10 @@ export async function addWatermarkToImage(
       );
 
       // =====================================================
-      // BRAND KANAN ATAS
+      // LOGO TIMEMARK KANAN ATAS
       // =====================================================
-      drawTopBrand(
+      drawTimeMarkBrand(
         ctx,
-        appName,
         width,
         referenceSize,
         brandFontSize,
@@ -525,7 +604,7 @@ export async function addWatermarkToImage(
 }
 
 // =====================================================
-// WORD WRAP
+// WRAP TEXT
 // =====================================================
 function wrapText(
   ctx: CanvasRenderingContext2D,
@@ -536,36 +615,53 @@ function wrapText(
     return [];
   }
 
-  const words = text
-    .replace(/\s+/g, ' ')
-    .trim()
-    .split(' ');
+  const words =
+    text
+      .replace(/\s+/g, ' ')
+      .trim()
+      .split(' ');
 
-  const lines: string[] = [];
-  let currentLine = '';
+  const lines: string[] =
+    [];
 
-  words.forEach((word) => {
-    const testLine =
-      currentLine.length > 0
-        ? `${currentLine} ${word}`
-        : word;
+  let currentLine =
+    '';
 
-    const measuredWidth =
-      ctx.measureText(testLine).width;
+  words.forEach(
+    (word) => {
+      const testLine =
+        currentLine.length > 0
+          ? `${currentLine} ${word}`
+          : word;
 
-    if (
-      measuredWidth <= maxWidth ||
-      currentLine.length === 0
-    ) {
-      currentLine = testLine;
-    } else {
-      lines.push(currentLine);
-      currentLine = word;
+      const measuredWidth =
+        ctx.measureText(
+          testLine
+        ).width;
+
+      if (
+        measuredWidth <=
+          maxWidth ||
+        currentLine.length ===
+          0
+      ) {
+        currentLine =
+          testLine;
+      } else {
+        lines.push(
+          currentLine
+        );
+
+        currentLine =
+          word;
+      }
     }
-  });
+  );
 
   if (currentLine) {
-    lines.push(currentLine);
+    lines.push(
+      currentLine
+    );
   }
 
   return lines;
@@ -588,13 +684,19 @@ function formatCoordinates(
   }
 
   const lat =
-    typeof latitude === 'string'
-      ? Number.parseFloat(latitude)
+    typeof latitude ===
+    'string'
+      ? Number.parseFloat(
+          latitude
+        )
       : latitude;
 
   const lng =
-    typeof longitude === 'string'
-      ? Number.parseFloat(longitude)
+    typeof longitude ===
+    'string'
+      ? Number.parseFloat(
+          longitude
+        )
       : longitude;
 
   if (
@@ -610,13 +712,19 @@ function formatCoordinates(
   const lngDirection =
     lng < 0 ? 'W' : 'E';
 
-  return `${Math.abs(lat).toFixed(6)}°${latDirection}, ${Math.abs(
+  return `${Math.abs(
+    lat
+  ).toFixed(
+    6
+  )}°${latDirection}, ${Math.abs(
     lng
-  ).toFixed(6)}°${lngDirection}`;
+  ).toFixed(
+    6
+  )}°${lngDirection}`;
 }
 
 // =====================================================
-// ROUNDED RECTANGLE
+// ROUNDED RECT
 // =====================================================
 function drawRoundedRect(
   ctx: CanvasRenderingContext2D,
@@ -626,11 +734,12 @@ function drawRoundedRect(
   height: number,
   radius: number
 ): void {
-  const r = Math.min(
-    radius,
-    width / 2,
-    height / 2
-  );
+  const r =
+    Math.min(
+      radius,
+      width / 2,
+      height / 2
+    );
 
   ctx.beginPath();
 
@@ -640,7 +749,9 @@ function drawRoundedRect(
   );
 
   ctx.lineTo(
-    x + width - r,
+    x +
+      width -
+      r,
     y
   );
 
@@ -653,13 +764,17 @@ function drawRoundedRect(
 
   ctx.lineTo(
     x + width,
-    y + height - r
+    y +
+      height -
+      r
   );
 
   ctx.quadraticCurveTo(
     x + width,
     y + height,
-    x + width - r,
+    x +
+      width -
+      r,
     y + height
   );
 
@@ -672,7 +787,9 @@ function drawRoundedRect(
     x,
     y + height,
     x,
-    y + height - r
+    y +
+      height -
+      r
   );
 
   ctx.lineTo(
@@ -704,41 +821,59 @@ function drawShieldIcon(
   ctx.strokeStyle =
     'rgba(255,255,255,0.76)';
 
-  ctx.lineWidth = Math.max(
-    2,
-    size * 0.1
-  );
+  ctx.lineWidth =
+    Math.max(
+      2,
+      size * 0.1
+    );
 
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  ctx.lineCap =
+    'round';
+
+  ctx.lineJoin =
+    'round';
 
   ctx.beginPath();
 
   ctx.moveTo(
-    x + size / 2,
+    x +
+      size / 2,
     y
   );
 
   ctx.lineTo(
     x + size,
-    y + size * 0.2
+    y +
+      size *
+        0.2
   );
 
   ctx.lineTo(
-    x + size * 0.9,
-    y + size * 0.7
+    x +
+      size *
+        0.9,
+    y +
+      size *
+        0.7
   );
 
   ctx.quadraticCurveTo(
-    x + size / 2,
+    x +
+      size / 2,
     y + size,
-    x + size * 0.1,
-    y + size * 0.7
+    x +
+      size *
+        0.1,
+    y +
+      size *
+        0.7
   );
 
   ctx.lineTo(
     x,
-    y + size * 0.2
+    y +
+      size *
+        0.2
   );
 
   ctx.closePath();
@@ -747,18 +882,30 @@ function drawShieldIcon(
   ctx.beginPath();
 
   ctx.moveTo(
-    x + size * 0.27,
-    y + size * 0.48
+    x +
+      size *
+        0.27,
+    y +
+      size *
+        0.48
   );
 
   ctx.lineTo(
-    x + size * 0.44,
-    y + size * 0.64
+    x +
+      size *
+        0.44,
+    y +
+      size *
+        0.64
   );
 
   ctx.lineTo(
-    x + size * 0.74,
-    y + size * 0.34
+    x +
+      size *
+        0.74,
+    y +
+      size *
+        0.34
   );
 
   ctx.stroke();
@@ -767,11 +914,13 @@ function drawShieldIcon(
 }
 
 // =====================================================
-// BRAND KANAN ATAS
+// LOGO TIMEMARK KANAN ATAS
+// TIME = KUNING
+// MARK = PUTIH
+// SUBTITLE = FOTO 100% AKURAT
 // =====================================================
-function drawTopBrand(
+function drawTimeMarkBrand(
   ctx: CanvasRenderingContext2D,
-  appName: string,
   width: number,
   referenceSize: number,
   fontSize: number,
@@ -779,49 +928,108 @@ function drawTopBrand(
 ): void {
   const margin =
     Math.max(
-      16,
-      Math.round(width * 0.025)
+      18,
+      Math.round(
+        width * 0.025
+      )
     );
+
+  const brandY =
+    margin;
 
   ctx.save();
 
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'top';
+  ctx.textBaseline =
+    'top';
 
   ctx.shadowColor =
-    'rgba(0,0,0,0.48)';
+    'rgba(0,0,0,0.45)';
 
   ctx.shadowBlur =
     Math.max(
       2,
-      Math.round(referenceSize * 0.003)
+      Math.round(
+        referenceSize *
+          0.003
+      )
     );
 
-  ctx.shadowOffsetX = 1;
-  ctx.shadowOffsetY = 1;
+  ctx.shadowOffsetX =
+    1;
+
+  ctx.shadowOffsetY =
+    1;
 
   ctx.font =
     `700 ${fontSize}px Arial, Helvetica, sans-serif`;
 
-  ctx.fillStyle = '#FFC72C';
+  const timeText =
+    'Time';
+
+  const markText =
+    'mark';
+
+  const timeWidth =
+    ctx.measureText(
+      timeText
+    ).width;
+
+  const markWidth =
+    ctx.measureText(
+      markText
+    ).width;
+
+  const totalWidth =
+    timeWidth +
+    markWidth;
+
+  const brandStartX =
+    width -
+    margin -
+    totalWidth;
+
+  ctx.textAlign =
+    'left';
+
+  // TIME kuning
+  ctx.fillStyle =
+    '#FFC72C';
 
   ctx.fillText(
-    appName,
-    width - margin,
-    margin
+    timeText,
+    brandStartX,
+    brandY
   );
 
+  // MARK putih
+  ctx.fillStyle =
+    '#FFFFFF';
+
+  ctx.fillText(
+    markText,
+    brandStartX +
+      timeWidth,
+    brandY
+  );
+
+  // Subtitle
   ctx.font =
     `400 ${subFontSize}px Arial, Helvetica, sans-serif`;
 
   ctx.fillStyle =
     'rgba(255,255,255,0.92)';
 
+  ctx.textAlign =
+    'right';
+
   ctx.fillText(
-    'Foto terverifikasi',
-    width - margin,
-    margin +
-      Math.round(fontSize * 1.18)
+    'Foto 100% akurat',
+    width -
+      margin,
+    brandY +
+      Math.round(
+        fontSize * 1.18
+      )
   );
 
   ctx.restore();
