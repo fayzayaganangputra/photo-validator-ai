@@ -27,7 +27,7 @@ export interface AutoDetectOptions {
   padding?: number;
 }
 
-const DEFAULT_JPEG_QUALITY = 0.94;
+const DEFAULT_JPEG_QUALITY = 0.96;
 const DEFAULT_MIN_OUTPUT_SIZE = 320;
 const DEFAULT_MAX_OUTPUT_SIZE = 2400;
 
@@ -253,6 +253,153 @@ function bilinearInterpolation(
 /**
  * Menentukan ukuran output agar cukup tajam namun tidak terlalu berat.
  */
+
+/**
+ * Sampling pixel bilinear.
+ *
+ * Versi lama memakai Math.round(x/y) lalu mengambil satu pixel terdekat.
+ * Itu membuat garis diagonal, huruf kecil, dan barcode terlihat bergerigi.
+ *
+ * Fungsi ini mencampur 4 pixel terdekat agar hasil perspective crop
+ * lebih halus dan lebih mirip gambar original.
+ */
+function sampleBilinearPixel(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number
+): [number, number, number, number] {
+  const clampedX =
+    clamp(
+      x,
+      0,
+      width - 1
+    );
+
+  const clampedY =
+    clamp(
+      y,
+      0,
+      height - 1
+    );
+
+  const x0 =
+    Math.floor(
+      clampedX
+    );
+
+  const y0 =
+    Math.floor(
+      clampedY
+    );
+
+  const x1 =
+    Math.min(
+      x0 + 1,
+      width - 1
+    );
+
+  const y1 =
+    Math.min(
+      y0 + 1,
+      height - 1
+    );
+
+  const tx =
+    clampedX - x0;
+
+  const ty =
+    clampedY - y0;
+
+  const index00 =
+    (
+      y0 *
+      width +
+      x0
+    ) *
+    4;
+
+  const index10 =
+    (
+      y0 *
+      width +
+      x1
+    ) *
+    4;
+
+  const index01 =
+    (
+      y1 *
+      width +
+      x0
+    ) *
+    4;
+
+  const index11 =
+    (
+      y1 *
+      width +
+      x1
+    ) *
+    4;
+
+  const result:
+    [number, number, number, number] =
+    [0, 0, 0, 255];
+
+  for (
+    let channel = 0;
+    channel < 4;
+    channel += 1
+  ) {
+    const top =
+      data[
+        index00 +
+        channel
+      ] *
+        (
+          1 -
+          tx
+        ) +
+      data[
+        index10 +
+        channel
+      ] *
+        tx;
+
+    const bottom =
+      data[
+        index01 +
+        channel
+      ] *
+        (
+          1 -
+          tx
+        ) +
+      data[
+        index11 +
+        channel
+      ] *
+        tx;
+
+    result[
+      channel
+    ] =
+      Math.round(
+        top *
+          (
+            1 -
+            ty
+          ) +
+        bottom *
+          ty
+      );
+  }
+
+  return result;
+}
+
 function calculateOutputSize(
   topLeft: Point,
   topRight: Point,
@@ -562,31 +709,14 @@ export function createPerspectiveCrop(
           v
         );
 
-      const sourceX =
-        clamp(
-          Math.round(
-            mapped.x
-          ),
-          0,
-          sourceWidth - 1
+      const sampledPixel =
+        sampleBilinearPixel(
+          sourceData,
+          sourceWidth,
+          sourceHeight,
+          mapped.x,
+          mapped.y
         );
-
-      const sourceY =
-        clamp(
-          Math.round(
-            mapped.y
-          ),
-          0,
-          sourceHeight - 1
-        );
-
-      const sourceIndex =
-        (
-          sourceY *
-          sourceWidth +
-          sourceX
-        ) *
-        4;
 
       const outputIndex =
         (
@@ -599,30 +729,22 @@ export function createPerspectiveCrop(
       outputData[
         outputIndex
       ] =
-        sourceData[
-          sourceIndex
-        ];
+        sampledPixel[0];
 
       outputData[
         outputIndex + 1
       ] =
-        sourceData[
-          sourceIndex + 1
-        ];
+        sampledPixel[1];
 
       outputData[
         outputIndex + 2
       ] =
-        sourceData[
-          sourceIndex + 2
-        ];
+        sampledPixel[2];
 
       outputData[
         outputIndex + 3
       ] =
-        sourceData[
-          sourceIndex + 3
-        ];
+        sampledPixel[3];
     }
   }
 
@@ -698,11 +820,11 @@ export function applyFilterToCanvas(
  * 2. adaptive brightness
  * 3. contrast stretch
  * 4. slight color normalization
- * 5. sharpen ringan
+ * 5. sharpen sangat ringan
  *
  * Tujuan:
  * - foto gelap jadi lebih terang
- * - teks kecil lebih jelas
+ * - teks kecil lebih jelas tanpa membuat edge patah-patah
  * - warna tetap natural
  * - tetap aman untuk validasi/OCR
  */
@@ -756,7 +878,7 @@ function applyEnhancePipeline(
    */
   applyLightSharpen(
     canvas,
-    0.46
+    0.20
   );
 }
 
@@ -907,7 +1029,7 @@ function enhanceBrightnessContrast(
     average < 70
   ) {
     brightnessLift =
-      28;
+      14;
   } else if (
     average < 95
   ) {
@@ -917,12 +1039,12 @@ function enhanceBrightnessContrast(
     average < 120
   ) {
     brightnessLift =
-      12;
+      8;
   } else if (
     average < 145
   ) {
     brightnessLift =
-      6;
+      4;
   }
 
   const sourceLow =
@@ -951,10 +1073,10 @@ function enhanceBrightnessContrast(
    * Target dibuat agar highlight tetap aman.
    */
   const targetLow =
-    10;
+    16;
 
   const targetHigh =
-    245;
+    238;
 
   const targetRange =
     targetHigh -
@@ -1001,7 +1123,7 @@ function enhanceBrightnessContrast(
      * chroma tetap dipertahankan, hanya sedikit dinormalisasi.
      */
     const saturationFactor =
-      0.92;
+      0.96;
 
     const delta =
       adjustedLuminance -
