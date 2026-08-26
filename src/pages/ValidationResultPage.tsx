@@ -33,9 +33,8 @@ import {
 
 import { savePhoto } from '../utils/storage';
 import {
-  addWatermarkToImage,
-  type WatermarkStyle,
-} from '../utils/watermark';
+  addClassicWatermark,
+} from '../utils/watermarkClassic';
 
 interface ValidationLocationState {
   imageData?: string;
@@ -154,71 +153,6 @@ const formatCoordinatePreview = (
 };
 
 
-const generateVerificationCodePreview = async (
-  imageData: string,
-  data: {
-    date: string;
-    time: string;
-    latitude?: number;
-    longitude?: number;
-    categoryName?: string;
-  }
-): Promise<string> => {
-  const raw = [
-    data.date,
-    data.time,
-    data.latitude ?? '',
-    data.longitude ?? '',
-    data.categoryName ?? '',
-    imageData.slice(-1000),
-  ].join('|');
-
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-
-  if (window.crypto?.subtle) {
-    const encoded = new TextEncoder().encode(raw);
-
-    const hashBuffer = await window.crypto.subtle.digest(
-      'SHA-256',
-      encoded
-    );
-
-    const bytes = new Uint8Array(hashBuffer);
-
-    let code = '';
-
-    for (let index = 0; index < 14; index += 1) {
-      code += alphabet[
-        bytes[index % bytes.length] % alphabet.length
-      ];
-    }
-
-    return code;
-  }
-
-  // Fallback sederhana jika Web Crypto tidak tersedia.
-  let hash = 2166136261;
-
-  for (let index = 0; index < raw.length; index += 1) {
-    hash ^= raw.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  let fallbackCode = '';
-  let seed = hash >>> 0;
-
-  for (let index = 0; index < 14; index += 1) {
-    seed =
-      (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-
-    fallbackCode += alphabet[
-      seed % alphabet.length
-    ];
-  }
-
-  return fallbackCode;
-};
-
 export const ValidationResultPage: React.FC = () => {
   const { categoryId } = useParams<{
     categoryId: string;
@@ -268,11 +202,6 @@ export const ValidationResultPage: React.FC = () => {
   const [formError, setFormError] = useState('');
   const [saveError, setSaveError] = useState('');
 
-  const [verificationCode, setVerificationCode] = useState('');
-
-  const [watermarkStyle, setWatermarkStyle] =
-    useState<WatermarkStyle>('timemark');
-
   const category = CATEGORIES.find(
     (item) => item.id === categoryId
   );
@@ -300,8 +229,6 @@ export const ValidationResultPage: React.FC = () => {
   }
 
   const handleRetake = (): void => {
-    setVerificationCode('');
-
     navigate(`/capture/${categoryId}`, {
       replace: true,
     });
@@ -539,50 +466,15 @@ export const ValidationResultPage: React.FC = () => {
       console.log('Lokasi:', watermarkLocation.trim());
       console.log('Koordinat:', coordinates);
 
-      let generatedVerificationCode = '';
-
-      if (watermarkStyle === 'timemark') {
-        generatedVerificationCode =
-          await generateVerificationCodePreview(
-            imageData,
-            {
-              date: formattedDate,
-              time: watermarkTime,
-              latitude: coordinates?.latitude,
-              longitude: coordinates?.longitude,
-              categoryName: category.name,
-            }
-          );
-
-        setVerificationCode(
-          generatedVerificationCode
-        );
-
-        console.log(
-          'Verification code:',
-          generatedVerificationCode
-        );
-      } else {
-        setVerificationCode('');
-      }
-
       const watermarkedImage =
-        await addWatermarkToImage(imageData, {
-          style: watermarkStyle,
-          appName:
-            watermarkStyle === 'timemark'
-              ? 'Timemark'
-              : 'SEANANTA',
+        await addClassicWatermark(imageData, {
+          appName: '',
           categoryName: category.name,
           date: formattedDate,
           time: watermarkTime,
           locationText: watermarkLocation.trim(),
           latitude: coordinates?.latitude,
           longitude: coordinates?.longitude,
-          verificationCode:
-            watermarkStyle === 'timemark'
-              ? generatedVerificationCode
-              : undefined,
         });
 
       console.log(
@@ -816,79 +708,12 @@ export const ValidationResultPage: React.FC = () => {
                       </h3>
 
                       <p className="text-sm text-slate-600 mt-1">
-                        Data berikut akan ditempel permanen pada
-                        foto setelah validasi berhasil.
+                        Data berikut akan ditempel permanen pada foto menggunakan watermark Classic.
                       </p>
                     </div>
                   </div>
 
                   <div className="space-y-4">
-                    {/* Pilihan model watermark */}
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Model Watermark
-                      </label>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWatermarkStyle('classic');
-                            setVerificationCode('');
-                            setFormError('');
-                          }}
-                          disabled={isSaving}
-                          className={`rounded-xl border p-3 text-left transition ${
-                            watermarkStyle === 'classic'
-                              ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100'
-                              : 'border-slate-300 bg-white hover:bg-slate-50'
-                          } disabled:cursor-not-allowed disabled:opacity-60`}
-                        >
-                          <p
-                            className={`text-sm font-semibold ${
-                              watermarkStyle === 'classic'
-                                ? 'text-blue-700'
-                                : 'text-slate-800'
-                            }`}
-                          >
-                            Classic
-                          </p>
-
-                          <p className="text-xs text-slate-500 mt-1">
-                            Model pertama, sederhana dan bersih.
-                          </p>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWatermarkStyle('timemark');
-                            setFormError('');
-                          }}
-                          disabled={isSaving}
-                          className={`rounded-xl border p-3 text-left transition ${
-                            watermarkStyle === 'timemark'
-                              ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100'
-                              : 'border-slate-300 bg-white hover:bg-slate-50'
-                          } disabled:cursor-not-allowed disabled:opacity-60`}
-                        >
-                          <p
-                            className={`text-sm font-semibold ${
-                              watermarkStyle === 'timemark'
-                                ? 'text-blue-700'
-                                : 'text-slate-800'
-                            }`}
-                          >
-                            Timemark
-                          </p>
-
-                          <p className="text-xs text-slate-500 mt-1">
-                            Jam gradient, alamat, GPS, dan kode verifikasi.
-                          </p>
-                        </button>
-                      </div>
-                    </div>
-
                     {/* Tanggal */}
                     <div>
                       <label
@@ -1089,126 +914,34 @@ export const ValidationResultPage: React.FC = () => {
                       )}
                     </div>
                   </div>
-
-                  {/* Preview watermark */}
-                  {watermarkStyle === 'classic' ? (
-                    <div className="mt-5 overflow-hidden rounded-2xl bg-slate-800 p-4 text-white shadow-inner">
-                      <div className="space-y-1.5">
-                        <p className="text-sm font-normal">
-                          SEANANTA
-                        </p>
-
-                        <p className="text-sm font-normal">
-                          {formatDateToIndonesian(
-                            watermarkDate
-                          ) || 'Tanggal belum diisi'}{' '}
-                          {watermarkTime || '--:--'}
-                        </p>
-
-                        <p className="text-sm font-normal whitespace-pre-wrap break-words">
-                          {watermarkLocation.trim() ||
-                            'Lokasi belum diisi'}
-                        </p>
-
-                        {coordinates && (
-                          <p className="text-sm font-normal">
-                            {formatCoordinatePreview(
-                              coordinates
-                            )}
-                          </p>
-                        )}
-                      </div>
-
-                      <p className="mt-3 text-[11px] text-white/45">
-                        Preview model Classic — tanpa background, ikon,
-                        shadow, atau kode verifikasi.
+                  {/* Preview watermark Classic */}
+                  <div className="mt-5 overflow-hidden rounded-2xl bg-slate-800 p-4 text-white shadow-inner">
+                    <div className="ml-auto max-w-[75%] text-right space-y-1.5">
+                      <p className="text-xs font-normal">
+                        {formatDateToIndonesian(
+                          watermarkDate
+                        ) || 'Tanggal belum diisi'}{' '}
+                        {watermarkTime || '--:--'}
                       </p>
-                    </div>
-                  ) : (
-                    <div className="mt-5 overflow-hidden rounded-2xl bg-slate-800 p-4 text-white shadow-inner">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="rounded-xl bg-white px-3 py-2">
-                          <p
-                            className="text-3xl leading-none font-extrabold tracking-tight"
-                            style={{
-                              background:
-                                'linear-gradient(to bottom, #0B67D1 0%, #064B9E 42%, #062B5A 72%, #061426 100%)',
-                              WebkitBackgroundClip: 'text',
-                              backgroundClip: 'text',
-                              color: 'transparent',
-                              transform: 'translateY(2px)',
-                            }}
-                          >
-                            {watermarkTime || '--:--'}
-                          </p>
-                        </div>
 
-                        <div className="text-right leading-tight">
-                          <p className="font-bold text-lg leading-none">
-                            <span className="text-amber-400">
-                              Time
-                            </span>
-                            <span className="text-white">
-                              mark
-                            </span>
-                          </p>
+                      <p className="text-xs font-normal whitespace-pre-wrap break-words">
+                        {watermarkLocation.trim() ||
+                          'Lokasi belum diisi'}
+                      </p>
 
-                          <p className="text-xs text-white/90 mt-1">
-                            Foto 100% akurat
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="relative mt-4 pl-4">
-                        <div className="absolute left-0 top-0 bottom-0 w-1 rounded-full bg-amber-400" />
-
-                        <p className="font-bold text-base">
-                          {formatDateToIndonesian(
-                            watermarkDate
-                          ) || 'Tanggal belum diisi'}
-                        </p>
-
-                        <p className="text-sm mt-3 whitespace-pre-wrap break-words leading-relaxed">
-                          {watermarkLocation.trim() ||
-                            'Lokasi belum diisi'}
-                        </p>
-
-                        <p className="text-sm mt-3">
+                      {coordinates && (
+                        <p className="text-xs font-normal">
                           {formatCoordinatePreview(
                             coordinates
                           )}
                         </p>
-                      </div>
-
-                      <div className="mt-4 flex items-center gap-2 text-white/70">
-                        <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                        <p className="text-xs">
-                          Timemark menjamin keaslian waktu
-                        </p>
-                      </div>
-
-                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
-                        <p className="text-[11px] uppercase tracking-wider text-white/50">
-                          Kode verifikasi
-                        </p>
-
-                        <div className="mt-1 flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4 text-white/70 flex-shrink-0" />
-
-                          <div>
-                            <p className="font-mono text-sm tracking-widest text-white">
-                              {verificationCode ||
-                                'Dibuat otomatis saat foto disimpan'}
-                            </p>
-
-                            <p className="text-[11px] text-white/60 mt-0.5">
-                              Timemark Verified
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                      )}
                     </div>
-                  )}
+
+                    <p className="mt-3 text-[11px] text-white/45 text-right">
+                      Preview watermark Classic — posisi kanan bawah foto.
+                    </p>
+                  </div>
 
                   {formError && (
                     <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3">
@@ -1260,11 +993,7 @@ export const ValidationResultPage: React.FC = () => {
               >
                 {saved
                   ? 'Foto Berhasil Disimpan'
-                  : `Beri Watermark ${
-                      watermarkStyle === 'timemark'
-                        ? 'Timemark'
-                        : 'Classic'
-                    } dan Simpan`}
+                  : 'Beri Watermark dan Simpan'}
               </Button>
             )}
           </div>

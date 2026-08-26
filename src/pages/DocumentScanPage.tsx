@@ -51,6 +51,13 @@ interface ImageSize {
   height: number;
 }
 
+interface DisplayedImageRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export const DocumentScanPage: React.FC =
   () => {
     const {
@@ -89,6 +96,14 @@ export const DocumentScanPage: React.FC =
       setImageSize,
     ] =
       useState<ImageSize | null>(
+        null
+      );
+
+    const [
+      displayedImageRect,
+      setDisplayedImageRect,
+    ] =
+      useState<DisplayedImageRect | null>(
         null
       );
 
@@ -139,6 +154,167 @@ export const DocumentScanPage: React.FC =
         [categoryId]
       );
 
+    const calculateDisplayedImageRect =
+      (): void => {
+        const container =
+          previewContainerRef.current;
+
+        const image =
+          imageRef.current;
+
+        if (
+          !container ||
+          !image ||
+          !image.naturalWidth ||
+          !image.naturalHeight
+        ) {
+          setDisplayedImageRect(
+            null
+          );
+
+          return;
+        }
+
+        const containerRect =
+          container.getBoundingClientRect();
+
+        const containerWidth =
+          containerRect.width;
+
+        const containerHeight =
+          containerRect.height;
+
+        if (
+          containerWidth <= 0 ||
+          containerHeight <= 0
+        ) {
+          setDisplayedImageRect(
+            null
+          );
+
+          return;
+        }
+
+        const imageAspect =
+          image.naturalWidth /
+          image.naturalHeight;
+
+        const containerAspect =
+          containerWidth /
+          containerHeight;
+
+        let width =
+          containerWidth;
+
+        let height =
+          containerHeight;
+
+        let left =
+          0;
+
+        let top =
+          0;
+
+        /*
+         * Meniru persis CSS object-contain:
+         * - landscape lebih lebar -> letterbox atas/bawah
+         * - portrait lebih tinggi  -> letterbox kiri/kanan
+         */
+        if (
+          imageAspect >
+          containerAspect
+        ) {
+          width =
+            containerWidth;
+
+          height =
+            width /
+            imageAspect;
+
+          top =
+            (
+              containerHeight -
+              height
+            ) /
+            2;
+        } else {
+          height =
+            containerHeight;
+
+          width =
+            height *
+            imageAspect;
+
+          left =
+            (
+              containerWidth -
+              width
+            ) /
+            2;
+        }
+
+        setDisplayedImageRect({
+          left,
+          top,
+          width,
+          height,
+        });
+      };
+
+    useEffect(() => {
+      if (
+        !imageSize
+      ) {
+        return;
+      }
+
+      calculateDisplayedImageRect();
+
+      const container =
+        previewContainerRef.current;
+
+      if (!container) {
+        return;
+      }
+
+      const resizeObserver =
+        new ResizeObserver(
+          () => {
+            calculateDisplayedImageRect();
+          }
+        );
+
+      resizeObserver.observe(
+        container
+      );
+
+      window.addEventListener(
+        'resize',
+        calculateDisplayedImageRect
+      );
+
+      window.addEventListener(
+        'orientationchange',
+        calculateDisplayedImageRect
+      );
+
+      return () => {
+        resizeObserver.disconnect();
+
+        window.removeEventListener(
+          'resize',
+          calculateDisplayedImageRect
+        );
+
+        window.removeEventListener(
+          'orientationchange',
+          calculateDisplayedImageRect
+        );
+      };
+    }, [
+      imageSize,
+    ]);
+
     useEffect(() => {
       if (
         !activeCorner
@@ -156,27 +332,38 @@ export const DocumentScanPage: React.FC =
           return;
         }
 
+        const imageRect =
+          displayedImageRect;
+
+        if (!imageRect) {
+          return;
+        }
+
         const rect =
           container.getBoundingClientRect();
 
+        const pointerX =
+          event.clientX -
+          rect.left -
+          imageRect.left;
+
+        const pointerY =
+          event.clientY -
+          rect.top -
+          imageRect.top;
+
         const normalizedX =
           clamp(
-            (
-              event.clientX -
-              rect.left
-            ) /
-              rect.width,
+            pointerX /
+              imageRect.width,
             0,
             1
           );
 
         const normalizedY =
           clamp(
-            (
-              event.clientY -
-              rect.top
-            ) /
-              rect.height,
+            pointerY /
+              imageRect.height,
             0,
             1
           );
@@ -234,7 +421,10 @@ export const DocumentScanPage: React.FC =
           handlePointerUp
         );
       };
-    }, [activeCorner]);
+    }, [
+      activeCorner,
+      displayedImageRect,
+    ]);
 
     if (
       !imageData ||
@@ -286,6 +476,12 @@ export const DocumentScanPage: React.FC =
           height:
             image.naturalHeight,
         });
+
+        window.requestAnimationFrame(
+          () => {
+            calculateDisplayedImageRect();
+          }
+        );
       };
 
     const resetCorners =
@@ -480,70 +676,77 @@ export const DocumentScanPage: React.FC =
                   className="absolute inset-0 w-full h-full object-contain pointer-events-none"
                 />
 
-                {imageSize && (
-                  <>
-                    <svg
-                      viewBox="0 0 100 100"
-                      preserveAspectRatio="none"
-                      className="absolute inset-0 w-full h-full pointer-events-none"
+                {imageSize &&
+                  displayedImageRect && (
+                    <div
+                      className="absolute z-20 pointer-events-none"
+                      style={{
+                        left:
+                          displayedImageRect.left,
+                        top:
+                          displayedImageRect.top,
+                        width:
+                          displayedImageRect.width,
+                        height:
+                          displayedImageRect.height,
+                      }}
                     >
-                      <polygon
-                        points={
-                          polygonPoints
-                        }
-                        fill="rgba(13,148,136,0.08)"
-                        stroke="rgba(45,212,191,0.95)"
-                        strokeWidth="0.55"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                    </svg>
-
-                    {cornerEntries.map(
-                      ({
-                        key,
-                        point,
-                      }) => (
-                        <button
-                          key={
-                            key
+                      <svg
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                        className="absolute inset-0 w-full h-full pointer-events-none"
+                      >
+                        <polygon
+                          points={
+                            polygonPoints
                           }
-                          type="button"
-                          aria-label={`Geser titik ${key}`}
-                          onPointerDown={(
-                            event
-                          ) => {
-                            event.preventDefault();
+                          fill="rgba(13,148,136,0.08)"
+                          stroke="rgba(45,212,191,0.95)"
+                          strokeWidth="0.55"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      </svg>
 
-                            (
-                              event.currentTarget as HTMLElement
-                            ).setPointerCapture?.(
-                              event.pointerId
-                            );
-
-                            setActiveCorner(
+                      {cornerEntries.map(
+                        ({
+                          key,
+                          point,
+                        }) => (
+                          <button
+                            key={
                               key
-                            );
-                          }}
-                          className={`absolute z-30 w-8 h-8 -ml-4 -mt-4 rounded-full border-[3px] border-white shadow-lg transition-transform ${
-                            activeCorner ===
-                            key
-                              ? 'bg-teal-400 scale-125'
-                              : 'bg-teal-500'
-                          }`}
-                          style={{
-                            left:
-                              `${point.x * 100}%`,
+                            }
+                            type="button"
+                            aria-label={`Geser titik ${key}`}
+                            onPointerDown={(
+                              event
+                            ) => {
+                              event.preventDefault();
 
-                            top:
-                              `${point.y * 100}%`,
-                          }}
-                        >
-                          <span className="absolute inset-[7px] rounded-full bg-white" />
-                        </button>
-                      )
-                    )}
-                  </>
-                )}
+                              setActiveCorner(
+                                key
+                              );
+                            }}
+                            className={`absolute z-30 w-8 h-8 -ml-4 -mt-4 rounded-full border-[3px] border-white shadow-lg transition-transform pointer-events-auto touch-none ${
+                              activeCorner ===
+                              key
+                                ? 'bg-teal-400 scale-125'
+                                : 'bg-teal-500'
+                            }`}
+                            style={{
+                              left:
+                                `${point.x * 100}%`,
+
+                              top:
+                                `${point.y * 100}%`,
+                            }}
+                          >
+                            <span className="absolute inset-[7px] rounded-full bg-white" />
+                          </button>
+                        )
+                      )}
+                    </div>
+                  )}
 
                 {!imageSize && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/60">
@@ -560,7 +763,8 @@ export const DocumentScanPage: React.FC =
 
               <p className="text-xs text-center text-slate-500 mt-3">
                 Pastikan seluruh dokumen berada
-                di dalam garis hijau.
+                di dalam garis hijau. Titik crop mengikuti
+                area foto sebenarnya, termasuk foto dari galeri.
               </p>
             </div>
           </div>
