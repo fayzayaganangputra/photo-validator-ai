@@ -12,6 +12,8 @@ export const CameraCapturePage: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const analysisCanvasRef = useRef<HTMLCanvasElement>(null);
+  const previewAreaRef = useRef<HTMLDivElement>(null);
+  const guideFrameRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -45,6 +47,9 @@ export const CameraCapturePage: React.FC = () => {
 
   const [centerConfidence, setCenterConfidence] =
     useState(0);
+
+  const [cameraAspectRatio, setCameraAspectRatio] =
+    useState<number>(9 / 16);
 
   const category = CATEGORIES.find((c) => c.id === categoryId) as {
     id: PhotoCategory;
@@ -101,6 +106,158 @@ export const CameraCapturePage: React.FC = () => {
       stopCamera();
     };
   }, [startCamera]);
+
+  interface SourceCropRect {
+    sx: number;
+    sy: number;
+    sw: number;
+    sh: number;
+  }
+
+  /**
+   * Mengubah posisi guide frame yang terlihat di layar
+   * menjadi koordinat pixel pada frame kamera asli.
+   *
+   * Ini memperhitungkan CSS `object-cover`, sehingga:
+   * area di dalam kotak hijau = area yang benar-benar dicapture.
+   */
+  const getGuideSourceRect = useCallback((): SourceCropRect | null => {
+    const video = videoRef.current;
+    const guide = guideFrameRef.current;
+
+    if (
+      !video ||
+      !guide ||
+      video.videoWidth <= 0 ||
+      video.videoHeight <= 0
+    ) {
+      return null;
+    }
+
+    const videoRect =
+      video.getBoundingClientRect();
+
+    const guideRect =
+      guide.getBoundingClientRect();
+
+    if (
+      videoRect.width <= 0 ||
+      videoRect.height <= 0 ||
+      guideRect.width <= 0 ||
+      guideRect.height <= 0
+    ) {
+      return null;
+    }
+
+    const sourceWidth =
+      video.videoWidth;
+
+    const sourceHeight =
+      video.videoHeight;
+
+    /*
+     * Karena preview memakai object-cover,
+     * video asli bisa "terpotong" pada sisi tertentu.
+     */
+    const coverScale =
+      Math.max(
+        videoRect.width / sourceWidth,
+        videoRect.height / sourceHeight
+      );
+
+    const renderedWidth =
+      sourceWidth * coverScale;
+
+    const renderedHeight =
+      sourceHeight * coverScale;
+
+    const renderedOffsetX =
+      (videoRect.width - renderedWidth) / 2;
+
+    const renderedOffsetY =
+      (videoRect.height - renderedHeight) / 2;
+
+    const guideLeftInVideo =
+      guideRect.left - videoRect.left;
+
+    const guideTopInVideo =
+      guideRect.top - videoRect.top;
+
+    const sourceLeft =
+      (
+        guideLeftInVideo -
+        renderedOffsetX
+      ) /
+      coverScale;
+
+    const sourceTop =
+      (
+        guideTopInVideo -
+        renderedOffsetY
+      ) /
+      coverScale;
+
+    const sourceRight =
+      (
+        guideLeftInVideo +
+        guideRect.width -
+        renderedOffsetX
+      ) /
+      coverScale;
+
+    const sourceBottom =
+      (
+        guideTopInVideo +
+        guideRect.height -
+        renderedOffsetY
+      ) /
+      coverScale;
+
+    const sx =
+      Math.max(
+        0,
+        Math.min(
+          sourceWidth - 1,
+          sourceLeft
+        )
+      );
+
+    const sy =
+      Math.max(
+        0,
+        Math.min(
+          sourceHeight - 1,
+          sourceTop
+        )
+      );
+
+    const right =
+      Math.max(
+        sx + 1,
+        Math.min(
+          sourceWidth,
+          sourceRight
+        )
+      );
+
+    const bottom =
+      Math.max(
+        sy + 1,
+        Math.min(
+          sourceHeight,
+          sourceBottom
+        )
+      );
+
+    return {
+      sx,
+      sy,
+      sw:
+        right - sx,
+      sh:
+        bottom - sy,
+    };
+  }, []);
 
   const getCenterStatusLabel = (
     status: CenterStatus
@@ -167,14 +324,26 @@ export const CameraCapturePage: React.FC = () => {
       return;
     }
 
+    const cropRect =
+      getGuideSourceRect();
+
+    if (!cropRect) {
+      setCenterStatus('detecting');
+      setCenterConfidence(0);
+      return;
+    }
+
     const analysisWidth = 240;
-    const aspect =
-      video.videoHeight / video.videoWidth;
+
+    const cropAspect =
+      cropRect.sh /
+      cropRect.sw;
 
     const analysisHeight = Math.max(
       135,
       Math.round(
-        analysisWidth * aspect
+        analysisWidth *
+        cropAspect
       )
     );
 
@@ -192,8 +361,16 @@ export const CameraCapturePage: React.FC = () => {
       return;
     }
 
+    /*
+     * Yang dianalisis hanya isi guide frame,
+     * bukan seluruh preview kamera.
+     */
     ctx.drawImage(
       video,
+      cropRect.sx,
+      cropRect.sy,
+      cropRect.sw,
+      cropRect.sh,
       0,
       0,
       analysisWidth,
@@ -493,7 +670,7 @@ export const CameraCapturePage: React.FC = () => {
     setCenterConfidence(
       confidence
     );
-  }, []);
+  }, [getGuideSourceRect]);
 
   useEffect(() => {
     if (
@@ -612,36 +789,114 @@ export const CameraCapturePage: React.FC = () => {
 };
 
   const handleCapture = async () => {
-    if (!videoRef.current || !canvasRef.current || !categoryId) return;
+    if (
+      !videoRef.current ||
+      !canvasRef.current ||
+      !categoryId
+    ) {
+      return;
+    }
 
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    const video =
+      videoRef.current;
 
-    if (!ctx) return;
+    const canvas =
+      canvasRef.current;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const ctx =
+      canvas.getContext(
+        '2d'
+      );
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    if (!ctx) {
+      return;
+    }
 
-    const imageData = canvas.toDataURL('image/jpeg', 0.92);
-    setCapturedImage(imageData);
+    const cropRect =
+      getGuideSourceRect();
+
+    if (!cropRect) {
+      setError(
+        'Area kamera belum siap. Tunggu sebentar lalu coba foto kembali.'
+      );
+      return;
+    }
+
+    /*
+     * WYSIWYG CAPTURE:
+     * yang disimpan hanya area yang berada
+     * di dalam guide frame pada preview.
+     */
+    const outputWidth =
+      Math.max(
+        1,
+        Math.round(
+          cropRect.sw
+        )
+      );
+
+    const outputHeight =
+      Math.max(
+        1,
+        Math.round(
+          cropRect.sh
+        )
+      );
+
+    canvas.width =
+      outputWidth;
+
+    canvas.height =
+      outputHeight;
+
+    ctx.drawImage(
+      video,
+
+      cropRect.sx,
+      cropRect.sy,
+      cropRect.sw,
+      cropRect.sh,
+
+      0,
+      0,
+      outputWidth,
+      outputHeight
+    );
+
+    const imageData =
+      canvas.toDataURL(
+        'image/jpeg',
+        0.94
+      );
+
+    setCapturedImage(
+      imageData
+    );
 
     // Untuk kategori dokumen/serial number, masuk ke scanner terlebih dahulu.
-    if (categoryId === 'bast-document' || categoryId === 'serial-number') {
+    if (
+      categoryId ===
+        'bast-document' ||
+      categoryId ===
+        'serial-number'
+    ) {
       stopCamera();
 
-      navigate(`/scan/${categoryId}`, {
-        state: {
-          imageData
+      navigate(
+        `/scan/${categoryId}`,
+        {
+          state: {
+            imageData
+          }
         }
-      });
+      );
 
       return;
     }
 
-    await validateAndNavigate(imageData);
+    await validateAndNavigate(
+      imageData
+    );
   };
 
   const handleUploadTest = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -713,7 +968,10 @@ export const CameraCapturePage: React.FC = () => {
       <Header title={category.name} showBack className="bg-white border-slate-200" />
 
       <div className="flex-1 relative flex flex-col bg-black">
-        <div className="flex-1 relative bg-black overflow-hidden">
+        <div
+          ref={previewAreaRef}
+          className="flex-1 relative bg-black overflow-hidden"
+        >
           {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center z-10 bg-black">
               <div className="text-center">
@@ -758,6 +1016,21 @@ export const CameraCapturePage: React.FC = () => {
                 playsInline
                 muted
                 onClick={handleTapToFocus}
+                onLoadedMetadata={() => {
+                  const video =
+                    videoRef.current;
+
+                  if (
+                    video &&
+                    video.videoWidth > 0 &&
+                    video.videoHeight > 0
+                  ) {
+                    setCameraAspectRatio(
+                      video.videoWidth /
+                      video.videoHeight
+                    );
+                  }
+                }}
                 className="absolute inset-0 w-full h-full object-cover bg-black"
                 style={{ opacity: isLoading ? 0 : 1 }}
               />
@@ -807,13 +1080,23 @@ export const CameraCapturePage: React.FC = () => {
 
               <div className="absolute inset-0 z-10 pointer-events-none">
                 <div
+                  ref={guideFrameRef}
                   className="absolute"
                   style={{
                     left: '50%',
                     top: '50%',
                     transform: 'translate(-50%, -50%)',
+
+                    /*
+                     * Frame mengikuti rasio kamera HP.
+                     * maxWidth/maxHeight menjaga agar frame
+                     * selalu masuk area preview pada berbagai layar.
+                     */
                     width: '86%',
-                    height: '70%'
+                    maxWidth: '86%',
+                    maxHeight: '78%',
+                    aspectRatio:
+                      `${cameraAspectRatio}`,
                   }}
                 >
                   <div
@@ -839,6 +1122,12 @@ export const CameraCapturePage: React.FC = () => {
                       transform: 'translate(-50%, -50%)'
                     }}
                   />
+                </div>
+              </div>
+
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+                <div className="rounded-full bg-black/60 px-3 py-1.5 text-[11px] text-white/90 backdrop-blur-sm">
+                  Area di dalam kotak = hasil foto
                 </div>
               </div>
             </>
