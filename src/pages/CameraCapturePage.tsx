@@ -11,6 +11,7 @@ export const CameraCapturePage: React.FC = () => {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const analysisCanvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -22,7 +23,28 @@ export const CameraCapturePage: React.FC = () => {
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
 
   // Tambahan kamera fokus
-   const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
+  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
+
+  // =====================================================
+  // LIVE CENTER DETECTION
+  // =====================================================
+  type CenterStatus =
+    | 'detecting'
+    | 'centered'
+    | 'move-left'
+    | 'move-right'
+    | 'move-up'
+    | 'move-down'
+    | 'move-up-left'
+    | 'move-up-right'
+    | 'move-down-left'
+    | 'move-down-right';
+
+  const [centerStatus, setCenterStatus] =
+    useState<CenterStatus>('detecting');
+
+  const [centerConfidence, setCenterConfidence] =
+    useState(0);
 
   const category = CATEGORIES.find((c) => c.id === categoryId) as {
     id: PhotoCategory;
@@ -79,6 +101,439 @@ export const CameraCapturePage: React.FC = () => {
       stopCamera();
     };
   }, [startCamera]);
+
+  const getCenterStatusLabel = (
+    status: CenterStatus
+  ): string => {
+    switch (status) {
+      case 'centered':
+        return 'Posisi sudah di tengah';
+
+      case 'move-left':
+        return 'Geser objek ke kiri';
+
+      case 'move-right':
+        return 'Geser objek ke kanan';
+
+      case 'move-up':
+        return 'Geser objek ke atas';
+
+      case 'move-down':
+        return 'Geser objek ke bawah';
+
+      case 'move-up-left':
+        return 'Geser objek ke kiri atas';
+
+      case 'move-up-right':
+        return 'Geser objek ke kanan atas';
+
+      case 'move-down-left':
+        return 'Geser objek ke kiri bawah';
+
+      case 'move-down-right':
+        return 'Geser objek ke kanan bawah';
+
+      default:
+        return 'Mendeteksi posisi objek...';
+    }
+  };
+
+  /**
+   * Live center detection ringan untuk PWA.
+   *
+   * Cara kerja:
+   * - mengambil frame video kecil
+   * - menghitung kekuatan edge/tekstur
+   * - mencari pusat bobot area paling informatif
+   * - membandingkan pusat tersebut dengan pusat kamera
+   *
+   * Ini tidak membutuhkan API/server dan dapat berjalan offline.
+   * Hasilnya digunakan sebagai bantuan visual, bukan sebagai
+   * pengganti validasi foto utama.
+   */
+  const analyzeLiveCenter = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = analysisCanvasRef.current;
+
+    if (
+      !video ||
+      !canvas ||
+      video.readyState < 2 ||
+      video.videoWidth <= 0 ||
+      video.videoHeight <= 0
+    ) {
+      setCenterStatus('detecting');
+      setCenterConfidence(0);
+      return;
+    }
+
+    const analysisWidth = 240;
+    const aspect =
+      video.videoHeight / video.videoWidth;
+
+    const analysisHeight = Math.max(
+      135,
+      Math.round(
+        analysisWidth * aspect
+      )
+    );
+
+    canvas.width = analysisWidth;
+    canvas.height = analysisHeight;
+
+    const ctx = canvas.getContext(
+      '2d',
+      {
+        willReadFrequently: true,
+      }
+    );
+
+    if (!ctx) {
+      return;
+    }
+
+    ctx.drawImage(
+      video,
+      0,
+      0,
+      analysisWidth,
+      analysisHeight
+    );
+
+    const frame = ctx.getImageData(
+      0,
+      0,
+      analysisWidth,
+      analysisHeight
+    );
+
+    const data = frame.data;
+
+    const luminance =
+      new Float32Array(
+        analysisWidth *
+        analysisHeight
+      );
+
+    for (
+      let y = 0;
+      y < analysisHeight;
+      y += 1
+    ) {
+      for (
+        let x = 0;
+        x < analysisWidth;
+        x += 1
+      ) {
+        const pixelIndex =
+          (
+            y *
+            analysisWidth +
+            x
+          ) *
+          4;
+
+        luminance[
+          y *
+          analysisWidth +
+          x
+        ] =
+          data[pixelIndex] * 0.299 +
+          data[pixelIndex + 1] * 0.587 +
+          data[pixelIndex + 2] * 0.114;
+      }
+    }
+
+    let totalWeight = 0;
+    let weightedX = 0;
+    let weightedY = 0;
+    let activeEdges = 0;
+
+    // Abaikan sedikit area pinggir karena UI/background
+    // biasanya menghasilkan edge besar yang menipu detector.
+    const minX =
+      Math.round(
+        analysisWidth * 0.06
+      );
+
+    const maxX =
+      Math.round(
+        analysisWidth * 0.94
+      );
+
+    const minY =
+      Math.round(
+        analysisHeight * 0.06
+      );
+
+    const maxY =
+      Math.round(
+        analysisHeight * 0.94
+      );
+
+    for (
+      let y = minY;
+      y < maxY;
+      y += 2
+    ) {
+      for (
+        let x = minX;
+        x < maxX;
+        x += 2
+      ) {
+        const index =
+          y *
+          analysisWidth +
+          x;
+
+        const gx =
+          Math.abs(
+            luminance[
+              index + 1
+            ] -
+            luminance[
+              index - 1
+            ]
+          );
+
+        const gy =
+          Math.abs(
+            luminance[
+              index + analysisWidth
+            ] -
+            luminance[
+              index - analysisWidth
+            ]
+          );
+
+        const magnitude =
+          gx + gy;
+
+        // Hanya edge yang cukup berarti.
+        if (
+          magnitude < 24
+        ) {
+          continue;
+        }
+
+        /*
+         * Batasi bobot agar satu area sangat tajam
+         * tidak mendominasi seluruh perhitungan.
+         */
+        const weight =
+          Math.min(
+            magnitude,
+            120
+          );
+
+        totalWeight +=
+          weight;
+
+        weightedX +=
+          x * weight;
+
+        weightedY +=
+          y * weight;
+
+        activeEdges += 1;
+      }
+    }
+
+    const minimumEdges =
+      Math.max(
+        25,
+        Math.round(
+          (
+            analysisWidth *
+            analysisHeight
+          ) /
+          900
+        )
+      );
+
+    if (
+      totalWeight <= 0 ||
+      activeEdges <
+        minimumEdges
+    ) {
+      setCenterStatus(
+        'detecting'
+      );
+
+      setCenterConfidence(
+        0
+      );
+
+      return;
+    }
+
+    const subjectX =
+      weightedX /
+      totalWeight /
+      analysisWidth;
+
+    const subjectY =
+      weightedY /
+      totalWeight /
+      analysisHeight;
+
+    const deltaX =
+      subjectX - 0.5;
+
+    const deltaY =
+      subjectY - 0.5;
+
+    /*
+     * Toleransi center.
+     * 0.075 = sekitar 7.5% dari dimensi frame.
+     */
+    const toleranceX =
+      0.075;
+
+    const toleranceY =
+      0.075;
+
+    const horizontal =
+      deltaX <
+      -toleranceX
+        ? 'right'
+        : deltaX >
+            toleranceX
+          ? 'left'
+          : null;
+
+    const vertical =
+      deltaY <
+      -toleranceY
+        ? 'down'
+        : deltaY >
+            toleranceY
+          ? 'up'
+          : null;
+
+    let nextStatus: CenterStatus =
+      'centered';
+
+    /*
+     * Arah instruksi adalah arah perpindahan objek,
+     * bukan lokasi objek saat ini.
+     */
+    if (
+      vertical === 'up' &&
+      horizontal === 'left'
+    ) {
+      nextStatus =
+        'move-up-left';
+    } else if (
+      vertical === 'up' &&
+      horizontal === 'right'
+    ) {
+      nextStatus =
+        'move-up-right';
+    } else if (
+      vertical === 'down' &&
+      horizontal === 'left'
+    ) {
+      nextStatus =
+        'move-down-left';
+    } else if (
+      vertical === 'down' &&
+      horizontal === 'right'
+    ) {
+      nextStatus =
+        'move-down-right';
+    } else if (
+      horizontal === 'left'
+    ) {
+      nextStatus =
+        'move-left';
+    } else if (
+      horizontal === 'right'
+    ) {
+      nextStatus =
+        'move-right';
+    } else if (
+      vertical === 'up'
+    ) {
+      nextStatus =
+        'move-up';
+    } else if (
+      vertical === 'down'
+    ) {
+      nextStatus =
+        'move-down';
+    }
+
+    const centerDistance =
+      Math.sqrt(
+        deltaX * deltaX +
+        deltaY * deltaY
+      );
+
+    const confidence =
+      Math.max(
+        0,
+        Math.min(
+          100,
+          Math.round(
+            (
+              1 -
+              centerDistance /
+                0.45
+            ) *
+            100
+          )
+        )
+      );
+
+    setCenterStatus(
+      nextStatus
+    );
+
+    setCenterConfidence(
+      confidence
+    );
+  }, []);
+
+  useEffect(() => {
+    if (
+      !stream ||
+      isLoading ||
+      capturedImage
+    ) {
+      return;
+    }
+
+    // Analisis tidak perlu setiap frame.
+    // 450 ms cukup ringan untuk PWA/mobile.
+    const intervalId =
+      window.setInterval(
+        analyzeLiveCenter,
+        450
+      );
+
+    // Jalankan sekali di awal agar indikator cepat muncul.
+    const firstRun =
+      window.setTimeout(
+        analyzeLiveCenter,
+        350
+      );
+
+    return () => {
+      window.clearInterval(
+        intervalId
+      );
+
+      window.clearTimeout(
+        firstRun
+      );
+    };
+  }, [
+    stream,
+    isLoading,
+    capturedImage,
+    analyzeLiveCenter,
+  ]);
 
   const validateAndNavigate = async (imageData: string) => {
     if (!categoryId) return;
@@ -170,8 +625,21 @@ export const CameraCapturePage: React.FC = () => {
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const imageData = canvas.toDataURL('image/jpeg', 0.85);
+    const imageData = canvas.toDataURL('image/jpeg', 0.92);
     setCapturedImage(imageData);
+
+    // Untuk kategori dokumen/serial number, masuk ke scanner terlebih dahulu.
+    if (categoryId === 'bast-document' || categoryId === 'serial-number') {
+      stopCamera();
+
+      navigate(`/scan/${categoryId}`, {
+        state: {
+          imageData
+        }
+      });
+
+      return;
+    }
 
     await validateAndNavigate(imageData);
   };
@@ -187,6 +655,20 @@ export const CameraCapturePage: React.FC = () => {
       const imageData = reader.result as string;
 
       setCapturedImage(imageData);
+
+      // Upload test mengikuti alur yang sama dengan hasil kamera.
+      if (categoryId === 'bast-document' || categoryId === 'serial-number') {
+        stopCamera();
+
+        navigate(`/scan/${categoryId}`, {
+          state: {
+            imageData
+          }
+        });
+
+        return;
+      }
+
       await validateAndNavigate(imageData);
     };
 
@@ -294,6 +776,35 @@ export const CameraCapturePage: React.FC = () => {
                 <Badge variant="info">{category.name}</Badge>
               </div>
 
+              {/* Live center status */}
+              <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+                <div
+                  className={`rounded-full px-4 py-2 text-sm font-semibold shadow-lg backdrop-blur-sm border ${
+                    centerStatus === 'centered'
+                      ? 'bg-emerald-500/90 border-emerald-300 text-white'
+                      : centerStatus === 'detecting'
+                        ? 'bg-slate-900/75 border-white/20 text-white'
+                        : 'bg-amber-500/90 border-amber-200 text-slate-950'
+                  }`}
+                >
+                  {centerStatus === 'centered'
+                    ? '✓ '
+                    : centerStatus === 'detecting'
+                      ? ''
+                      : '↔ '}
+
+                  {getCenterStatusLabel(
+                    centerStatus
+                  )}
+
+                  {centerStatus !== 'detecting' && (
+                    <span className="ml-2 text-xs opacity-80">
+                      {centerConfidence}%
+                    </span>
+                  )}
+                </div>
+              </div>
+
               <div className="absolute inset-0 z-10 pointer-events-none">
                 <div
                   className="absolute"
@@ -305,7 +816,15 @@ export const CameraCapturePage: React.FC = () => {
                     height: '70%'
                   }}
                 >
-                  <div className="absolute inset-0 border-2 border-white/60 rounded-3xl" />
+                  <div
+                    className={`absolute inset-0 border-2 rounded-3xl transition-colors duration-200 ${
+                      centerStatus === 'centered'
+                        ? 'border-emerald-400/90'
+                        : centerStatus === 'detecting'
+                          ? 'border-white/60'
+                          : 'border-amber-300/80'
+                    }`}
+                  />
 
                   <div className="absolute top-0 bottom-0 left-1/3 w-px bg-white/30" />
                   <div className="absolute top-0 bottom-0 left-2/3 w-px bg-white/30" />
@@ -401,6 +920,7 @@ export const CameraCapturePage: React.FC = () => {
       </div>
 
       <canvas ref={canvasRef} className="hidden" />
+      <canvas ref={analysisCanvasRef} className="hidden" />
 
       <div className="text-center text-xs text-slate-500 pb-4 bg-slate-900">
         {category.rules.length} aturan validasi
