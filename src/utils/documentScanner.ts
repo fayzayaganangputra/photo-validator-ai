@@ -1,1731 +1,3215 @@
 export type ScanFilter =
+
   | 'original'
+
   | 'enhance';
 
 export interface Point {
+
   x: number;
+
   y: number;
+
 }
 
 export interface CornerPoints {
+
   topLeft: Point;
+
   topRight: Point;
+
   bottomRight: Point;
+
   bottomLeft: Point;
+
 }
 
 export interface DocumentScanOptions {
+
   filter?: ScanFilter;
+
   jpegQuality?: number;
+
   minOutputSize?: number;
+
   maxOutputSize?: number;
+
 }
 
 export interface AutoDetectOptions {
+
   sampleSize?: number;
+
   edgeThreshold?: number;
+
   padding?: number;
+
 }
 
 const DEFAULT_JPEG_QUALITY = 0.96;
+
 const DEFAULT_MIN_OUTPUT_SIZE = 320;
+
 const DEFAULT_MAX_OUTPUT_SIZE = 2400;
 
 /**
+
  * Membatasi nilai agar selalu berada di antara min dan max.
+
  */
+
 export function clamp(
+
   value: number,
+
   min: number,
+
   max: number
+
 ): number {
+
   return Math.min(
+
     Math.max(value, min),
+
     max
+
   );
+
 }
 
 /**
+
  * Posisi default 4 sudut dalam koordinat normalized 0..1.
+
  */
+
 export function getDefaultCorners(): CornerPoints {
+
   return {
+
     topLeft: {
+
       x: 0.08,
+
       y: 0.08,
+
     },
+
     topRight: {
+
       x: 0.92,
+
       y: 0.08,
+
     },
+
     bottomRight: {
+
       x: 0.92,
+
       y: 0.92,
+
     },
+
     bottomLeft: {
+
       x: 0.08,
+
       y: 0.92,
+
     },
+
   };
+
 }
 
 /**
+
  * Pastikan semua sudut tetap berada di area gambar.
+
  */
+
 export function normalizeCorners(
+
   corners: CornerPoints
+
 ): CornerPoints {
+
   return {
+
     topLeft: {
+
       x: clamp(corners.topLeft.x, 0, 1),
+
       y: clamp(corners.topLeft.y, 0, 1),
+
     },
+
     topRight: {
+
       x: clamp(corners.topRight.x, 0, 1),
+
       y: clamp(corners.topRight.y, 0, 1),
+
     },
+
     bottomRight: {
+
       x: clamp(corners.bottomRight.x, 0, 1),
+
       y: clamp(corners.bottomRight.y, 0, 1),
+
     },
+
     bottomLeft: {
+
       x: clamp(corners.bottomLeft.x, 0, 1),
+
       y: clamp(corners.bottomLeft.y, 0, 1),
+
     },
+
   };
+
 }
 
 /**
+
  * Jarak Euclidean antar titik.
+
  */
+
 export function getDistance(
+
   first: Point,
+
   second: Point
+
 ): number {
+
   const dx =
+
     second.x - first.x;
 
   const dy =
+
     second.y - first.y;
 
   return Math.sqrt(
+
     dx * dx +
+
     dy * dy
+
   );
+
 }
 
 /**
+
  * Cek sederhana apakah susunan 4 titik cukup valid.
+
  */
+
 export function isValidCornerLayout(
+
   corners: CornerPoints
+
 ): boolean {
+
   const normalized =
+
     normalizeCorners(corners);
 
   const topWidth =
+
     getDistance(
+
       normalized.topLeft,
+
       normalized.topRight
+
     );
 
   const bottomWidth =
+
     getDistance(
+
       normalized.bottomLeft,
+
       normalized.bottomRight
+
     );
 
   const leftHeight =
+
     getDistance(
+
       normalized.topLeft,
+
       normalized.bottomLeft
+
     );
 
   const rightHeight =
+
     getDistance(
+
       normalized.topRight,
+
       normalized.bottomRight
+
     );
 
   const minimumSide =
+
     0.08;
 
   return (
+
     topWidth > minimumSide &&
+
     bottomWidth > minimumSide &&
+
     leftHeight > minimumSide &&
+
     rightHeight > minimumSide
+
   );
+
 }
 
 /**
+
  * Load data URL menjadi HTMLImageElement.
+
  */
+
 export function loadImageFromDataUrl(
+
   imageData: string
+
 ): Promise<HTMLImageElement> {
+
   return new Promise(
+
     (resolve, reject) => {
+
       const image =
+
         new Image();
 
       image.onload = () => {
+
         resolve(image);
+
       };
 
       image.onerror = () => {
+
         reject(
+
           new Error(
+
             'Gagal memuat gambar untuk proses document scanner.'
+
           )
+
         );
+
       };
 
       image.src =
+
         imageData;
+
     }
+
   );
+
 }
 
 /**
+
  * Mapping bilinear dari quad 4 sudut ke rectangle.
+
  * Ringan dan bisa berjalan offline tanpa OpenCV.
+
  */
+
 function bilinearInterpolation(
+
   topLeft: Point,
+
   topRight: Point,
+
   bottomRight: Point,
+
   bottomLeft: Point,
+
   u: number,
+
   v: number
+
 ): Point {
+
   const topX =
+
     topLeft.x +
+
     (
+
       topRight.x -
+
       topLeft.x
+
     ) *
+
       u;
 
   const topY =
+
     topLeft.y +
+
     (
+
       topRight.y -
+
       topLeft.y
+
     ) *
+
       u;
 
   const bottomX =
+
     bottomLeft.x +
+
     (
+
       bottomRight.x -
+
       bottomLeft.x
+
     ) *
+
       u;
 
   const bottomY =
+
     bottomLeft.y +
+
     (
+
       bottomRight.y -
+
       bottomLeft.y
+
     ) *
+
       u;
 
   return {
+
     x:
+
       topX +
+
       (
+
         bottomX -
+
         topX
+
       ) *
+
         v,
 
     y:
+
       topY +
+
       (
+
         bottomY -
+
         topY
+
       ) *
+
         v,
+
   };
+
 }
 
 /**
+
  * Menentukan ukuran output agar cukup tajam namun tidak terlalu berat.
+
  */
 
 /**
+
  * Sampling pixel bilinear.
+
  *
+
  * Versi lama memakai Math.round(x/y) lalu mengambil satu pixel terdekat.
+
  * Itu membuat garis diagonal, huruf kecil, dan barcode terlihat bergerigi.
+
  *
+
  * Fungsi ini mencampur 4 pixel terdekat agar hasil perspective crop
+
  * lebih halus dan lebih mirip gambar original.
+
  */
+
 function sampleBilinearPixel(
+
   data: Uint8ClampedArray,
+
   width: number,
+
   height: number,
+
   x: number,
+
   y: number
+
 ): [number, number, number, number] {
+
   const clampedX =
+
     clamp(
+
       x,
+
       0,
+
       width - 1
+
     );
 
   const clampedY =
+
     clamp(
+
       y,
+
       0,
+
       height - 1
+
     );
 
   const x0 =
+
     Math.floor(
+
       clampedX
+
     );
 
   const y0 =
+
     Math.floor(
+
       clampedY
+
     );
 
   const x1 =
+
     Math.min(
+
       x0 + 1,
+
       width - 1
+
     );
 
   const y1 =
+
     Math.min(
+
       y0 + 1,
+
       height - 1
+
     );
 
   const tx =
+
     clampedX - x0;
 
   const ty =
+
     clampedY - y0;
 
   const index00 =
+
     (
+
       y0 *
+
       width +
+
       x0
+
     ) *
+
     4;
 
   const index10 =
+
     (
+
       y0 *
+
       width +
+
       x1
+
     ) *
+
     4;
 
   const index01 =
+
     (
+
       y1 *
+
       width +
+
       x0
+
     ) *
+
     4;
 
   const index11 =
+
     (
+
       y1 *
+
       width +
+
       x1
+
     ) *
+
     4;
 
   const result:
+
     [number, number, number, number] =
+
     [0, 0, 0, 255];
 
   for (
+
     let channel = 0;
+
     channel < 4;
+
     channel += 1
+
   ) {
+
     const top =
+
       data[
+
         index00 +
+
         channel
+
       ] *
+
         (
+
           1 -
+
           tx
+
         ) +
+
       data[
+
         index10 +
+
         channel
+
       ] *
+
         tx;
 
     const bottom =
+
       data[
+
         index01 +
+
         channel
+
       ] *
+
         (
+
           1 -
+
           tx
+
         ) +
+
       data[
+
         index11 +
+
         channel
+
       ] *
+
         tx;
 
     result[
+
       channel
+
     ] =
+
       Math.round(
+
         top *
+
           (
+
             1 -
+
             ty
+
           ) +
+
         bottom *
+
           ty
+
       );
+
   }
 
   return result;
+
 }
 
 function calculateOutputSize(
+
   topLeft: Point,
+
   topRight: Point,
+
   bottomRight: Point,
+
   bottomLeft: Point,
+
   minOutputSize: number,
+
   maxOutputSize: number
+
 ): {
+
   width: number;
+
   height: number;
+
 } {
+
   const topWidth =
+
     getDistance(
+
       topLeft,
+
       topRight
+
     );
 
   const bottomWidth =
+
     getDistance(
+
       bottomLeft,
+
       bottomRight
+
     );
 
   const leftHeight =
+
     getDistance(
+
       topLeft,
+
       bottomLeft
+
     );
 
   const rightHeight =
+
     getDistance(
+
       topRight,
+
       bottomRight
+
     );
 
   let width =
+
     Math.max(
+
       topWidth,
+
       bottomWidth
+
     );
 
   let height =
+
     Math.max(
+
       leftHeight,
+
       rightHeight
+
     );
 
   if (
+
     width <= 0 ||
+
     height <= 0
+
   ) {
+
     throw new Error(
+
       'Ukuran area scan tidak valid.'
+
     );
+
   }
 
   const scaleUp =
+
     Math.max(
+
       minOutputSize / width,
+
       minOutputSize / height,
+
       1
+
     );
 
   width *=
+
     scaleUp;
 
   height *=
+
     scaleUp;
 
   const scaleDown =
+
     Math.min(
+
       maxOutputSize / width,
+
       maxOutputSize / height,
+
       1
+
     );
 
   width *=
+
     scaleDown;
 
   height *=
+
     scaleDown;
 
   return {
+
     width:
+
       Math.max(
+
         1,
+
         Math.round(width)
+
       ),
 
     height:
+
       Math.max(
+
         1,
+
         Math.round(height)
+
       ),
+
   };
+
 }
 
 /**
+
  * Crop + koreksi perspektif ringan.
+
  * Input corners dalam koordinat normalized 0..1.
+
  */
+
 export function createPerspectiveCrop(
+
   image: HTMLImageElement,
+
   corners: CornerPoints,
+
   options: DocumentScanOptions = {}
+
 ): string {
+
   const {
+
     filter = 'enhance',
+
     jpegQuality = DEFAULT_JPEG_QUALITY,
+
     minOutputSize = DEFAULT_MIN_OUTPUT_SIZE,
+
     maxOutputSize = DEFAULT_MAX_OUTPUT_SIZE,
+
   } = options;
 
   const normalizedCorners =
+
     normalizeCorners(corners);
 
   if (
+
     !isValidCornerLayout(
+
       normalizedCorners
+
     )
+
   ) {
+
     throw new Error(
+
       'Area scan terlalu kecil atau susunan titik sudut tidak valid.'
+
     );
+
   }
 
   const sourceWidth =
+
     image.naturalWidth ||
+
     image.width;
 
   const sourceHeight =
+
     image.naturalHeight ||
+
     image.height;
 
   if (
+
     sourceWidth <= 0 ||
+
     sourceHeight <= 0
+
   ) {
+
     throw new Error(
+
       'Ukuran gambar sumber tidak valid.'
+
     );
+
   }
 
   const sourceTopLeft: Point = {
+
     x:
+
       normalizedCorners.topLeft.x *
+
       sourceWidth,
 
     y:
+
       normalizedCorners.topLeft.y *
+
       sourceHeight,
+
   };
 
   const sourceTopRight: Point = {
+
     x:
+
       normalizedCorners.topRight.x *
+
       sourceWidth,
 
     y:
+
       normalizedCorners.topRight.y *
+
       sourceHeight,
+
   };
 
   const sourceBottomRight: Point = {
+
     x:
+
       normalizedCorners.bottomRight.x *
+
       sourceWidth,
 
     y:
+
       normalizedCorners.bottomRight.y *
+
       sourceHeight,
+
   };
 
   const sourceBottomLeft: Point = {
+
     x:
+
       normalizedCorners.bottomLeft.x *
+
       sourceWidth,
 
     y:
+
       normalizedCorners.bottomLeft.y *
+
       sourceHeight,
+
   };
 
   const outputSize =
+
     calculateOutputSize(
+
       sourceTopLeft,
+
       sourceTopRight,
+
       sourceBottomRight,
+
       sourceBottomLeft,
+
       minOutputSize,
+
       maxOutputSize
+
     );
 
   const sourceCanvas =
+
     document.createElement(
+
       'canvas'
+
     );
 
   sourceCanvas.width =
+
     sourceWidth;
 
   sourceCanvas.height =
+
     sourceHeight;
 
   const sourceCtx =
+
     sourceCanvas.getContext(
+
       '2d',
+
       {
+
         willReadFrequently: true,
+
       }
+
     );
 
   if (!sourceCtx) {
+
     throw new Error(
+
       'Canvas sumber tidak tersedia.'
+
     );
+
   }
 
+  sourceCtx.imageSmoothingEnabled = true;
+  sourceCtx.imageSmoothingQuality = 'high';
+
   sourceCtx.drawImage(
+
     image,
+
     0,
+
     0,
+
     sourceWidth,
+
     sourceHeight
+
   );
 
   const sourcePixels =
+
     sourceCtx.getImageData(
+
       0,
+
       0,
+
       sourceWidth,
+
       sourceHeight
+
     );
 
   const outputCanvas =
+
     document.createElement(
+
       'canvas'
+
     );
 
   outputCanvas.width =
+
     outputSize.width;
 
   outputCanvas.height =
+
     outputSize.height;
 
   const outputCtx =
+
     outputCanvas.getContext(
+
       '2d',
+
       {
+
         willReadFrequently: true,
+
       }
+
     );
 
   if (!outputCtx) {
+
     throw new Error(
+
       'Canvas hasil tidak tersedia.'
+
     );
+
   }
 
   const outputImageData =
+
     outputCtx.createImageData(
+
       outputSize.width,
+
       outputSize.height
+
     );
 
   const sourceData =
+
     sourcePixels.data;
 
   const outputData =
+
     outputImageData.data;
 
   for (
+
     let y = 0;
+
     y < outputSize.height;
+
     y += 1
+
   ) {
+
     const v =
+
       outputSize.height <= 1
+
         ? 0
+
         : y /
+
           (
+
             outputSize.height -
+
             1
+
           );
 
     for (
+
       let x = 0;
+
       x < outputSize.width;
+
       x += 1
+
     ) {
+
       const u =
+
         outputSize.width <= 1
+
           ? 0
+
           : x /
+
             (
+
               outputSize.width -
+
               1
+
             );
 
       const mapped =
+
         bilinearInterpolation(
+
           sourceTopLeft,
+
           sourceTopRight,
+
           sourceBottomRight,
+
           sourceBottomLeft,
+
           u,
+
           v
+
         );
 
       const sampledPixel =
+
         sampleBilinearPixel(
+
           sourceData,
+
           sourceWidth,
+
           sourceHeight,
+
           mapped.x,
+
           mapped.y
+
         );
 
       const outputIndex =
+
         (
+
           y *
+
           outputSize.width +
+
           x
+
         ) *
+
         4;
 
       outputData[
+
         outputIndex
+
       ] =
+
         sampledPixel[0];
 
       outputData[
+
         outputIndex + 1
+
       ] =
+
         sampledPixel[1];
 
       outputData[
+
         outputIndex + 2
+
       ] =
+
         sampledPixel[2];
 
       outputData[
+
         outputIndex + 3
+
       ] =
+
         sampledPixel[3];
+
     }
+
   }
 
   outputCtx.putImageData(
+
     outputImageData,
+
     0,
+
     0
+
   );
 
   applyFilterToCanvas(
+
     outputCanvas,
+
     filter
+
   );
 
   return outputCanvas.toDataURL(
+
     'image/jpeg',
+
     clamp(
+
       jpegQuality,
+
       0.5,
+
       1
+
     )
+
   );
+
 }
 
 /**
+
  * Convenience helper jika input masih berupa data URL.
+
  */
+
 export async function scanDocumentFromDataUrl(
+
   imageData: string,
+
   corners: CornerPoints,
+
   options: DocumentScanOptions = {}
+
 ): Promise<string> {
+
   const image =
+
     await loadImageFromDataUrl(
+
       imageData
+
     );
 
   return createPerspectiveCrop(
+
     image,
+
     corners,
+
     options
+
   );
+
 }
 
 /**
+
  * Filter utama scanner.
+
  * Hanya ada:
+
  * - original
+
  * - enhance
+
  */
+
 export function applyFilterToCanvas(
+
   canvas: HTMLCanvasElement,
+
   filter: ScanFilter
+
 ): void {
+
   if (
+
     filter === 'original'
+
   ) {
+
     return;
+
   }
 
   if (
+
     filter === 'enhance'
+
   ) {
+
     applyEnhancePipeline(
+
       canvas
+
     );
+
   }
+
 }
 
 /**
+
  * Pipeline Enhance:
+
  * 1. analisis luminance
+
  * 2. adaptive brightness
+
  * 3. contrast stretch
+
  * 4. slight color normalization
+
  * 5. sharpen sangat ringan
+
  *
+
  * Tujuan:
+
  * - foto gelap jadi lebih terang
+
  * - teks kecil lebih jelas tanpa membuat edge patah-patah
+
  * - warna tetap natural
+
  * - tetap aman untuk validasi/OCR
+
  */
+
 function applyEnhancePipeline(
+
   canvas: HTMLCanvasElement
+
 ): void {
+
   const ctx =
+
     canvas.getContext(
+
       '2d',
+
       {
+
         willReadFrequently: true,
+
       }
+
     );
 
   if (!ctx) {
+
     throw new Error(
+
       'Canvas enhance tidak tersedia.'
+
     );
+
   }
 
   const imageData =
+
     ctx.getImageData(
+
       0,
+
       0,
+
       canvas.width,
+
       canvas.height
+
     );
 
   const data =
+
     imageData.data;
 
   const stats =
+
+    analyzeLuminance(
+
+      data
+
+    );
+
+  /*
+   * Kurangi pantulan putih dari plastik secara konservatif.
+   * Ini hanya menekan highlight yang sangat terang dan netral;
+   * detail yang sudah benar-benar hilang karena overexposure tidak dibuat ulang.
+   */
+  suppressPlasticGlare(
+    data
+  );
+
+  // Hitung ulang statistik setelah highlight glare dikompresi.
+  const adjustedStats =
     analyzeLuminance(
       data
     );
 
   enhanceBrightnessContrast(
+
     data,
-    stats
+
+    adjustedStats
+
   );
 
   ctx.putImageData(
+
     imageData,
+
     0,
+
     0
+
   );
 
   /*
+
    * Sharpen dilakukan setelah brightness/contrast
+
    * supaya edge karakter lebih jelas.
+
    */
+
+  const sharpnessBefore = measureCanvasSharpness(canvas);
+
+  // Blur ringan diberi sharpen sedikit lebih kuat.
+  // Blur berat tidak direkonstruksi; validation.ts tetap harus menolaknya.
+  const sharpenStrength =
+    sharpnessBefore < 18
+      ? 0.24
+      : sharpnessBefore < 28
+        ? 0.18
+        : sharpnessBefore < 40
+          ? 0.12
+          : 0.08;
+
   applyLightSharpen(
     canvas,
-    0.20
+    sharpenStrength
   );
+
 }
 
 /**
+
  * Statistik luminance agar enhancement adaptif,
+
  * bukan sekadar menambah brightness tetap.
+
  */
+
 interface LuminanceStats {
+
   average: number;
+
   lowPercentile: number;
+
   highPercentile: number;
+
 }
 
 function analyzeLuminance(
+
   data: Uint8ClampedArray
+
 ): LuminanceStats {
+
   const histogram =
+
     new Uint32Array(
+
       256
+
     );
 
   let sum =
+
     0;
 
   let count =
+
     0;
 
   for (
+
     let index = 0;
+
     index < data.length;
+
     index += 4
+
   ) {
+
     const luminance =
+
       clamp(
+
         Math.round(
+
           data[index] *
+
             0.299 +
+
           data[index + 1] *
+
             0.587 +
+
           data[index + 2] *
+
             0.114
+
         ),
+
         0,
+
         255
+
       );
 
     histogram[
+
       luminance
+
     ] += 1;
 
     sum +=
+
       luminance;
 
     count += 1;
+
   }
 
   if (
+
     count === 0
+
   ) {
+
     return {
+
       average: 128,
+
       lowPercentile: 20,
+
       highPercentile: 235,
+
     };
+
   }
 
   const lowTarget =
+
     count * 0.02;
 
   const highTarget =
+
     count * 0.98;
 
   let cumulative =
+
     0;
 
   let lowPercentile =
+
     0;
 
   let highPercentile =
+
     255;
 
   for (
+
     let value = 0;
+
     value < 256;
+
     value += 1
+
   ) {
+
     cumulative +=
+
       histogram[value];
 
     if (
+
       cumulative >=
+
       lowTarget
+
     ) {
+
       lowPercentile =
+
         value;
+
       break;
+
     }
+
   }
 
   cumulative =
+
     0;
 
   for (
+
     let value = 0;
+
     value < 256;
+
     value += 1
+
   ) {
+
     cumulative +=
+
       histogram[value];
 
     if (
+
       cumulative >=
+
       highTarget
+
     ) {
+
       highPercentile =
+
         value;
+
       break;
+
     }
+
   }
 
   return {
+
     average:
+
       sum / count,
 
     lowPercentile,
 
     highPercentile,
+
   };
+
 }
 
 /**
+
  * Brightness + contrast adaptif.
+
  *
+
  * Foto gelap mendapat lift lebih besar.
+
  * Foto yang sudah terang hanya sedikit dikoreksi.
+
  */
-function enhanceBrightnessContrast(
-  data: Uint8ClampedArray,
-  stats: LuminanceStats
+
+/**
+ * Menekan glare/pantulan plastik yang berwarna putih atau hampir netral.
+ *
+ * Prinsip:
+ * - hanya bekerja pada pixel sangat terang;
+ * - lebih kuat pada highlight dengan chroma rendah (putih/netral);
+ * - menjaga warna asli sebisa mungkin;
+ * - tidak melakukan generative reconstruction.
+ *
+ * Jika pantulan sudah membuat angka/huruf benar-benar putih dan hilang,
+ * fungsi ini tidak dapat mengembalikan detail tersebut. Foto seperti itu
+ * tetap sebaiknya diambil ulang dan validation/OCR tetap menjadi pengaman.
+ */
+function suppressPlasticGlare(
+  data: Uint8ClampedArray
 ): void {
-  const average =
-    stats.average;
-
-  let brightnessLift =
-    0;
-
-  if (
-    average < 70
-  ) {
-    brightnessLift =
-      14;
-  } else if (
-    average < 95
-  ) {
-    brightnessLift =
-      20;
-  } else if (
-    average < 120
-  ) {
-    brightnessLift =
-      8;
-  } else if (
-    average < 145
-  ) {
-    brightnessLift =
-      4;
-  }
-
-  const sourceLow =
-    clamp(
-      stats.lowPercentile,
-      0,
-      80
-    );
-
-  const sourceHigh =
-    clamp(
-      stats.highPercentile,
-      150,
-      255
-    );
-
-  const sourceRange =
-    Math.max(
-      70,
-      sourceHigh -
-      sourceLow
-    );
-
-  /*
-   * Jangan stretch terlalu agresif.
-   * Target dibuat agar highlight tetap aman.
-   */
-  const targetLow =
-    16;
-
-  const targetHigh =
-    238;
-
-  const targetRange =
-    targetHigh -
-    targetLow;
-
   for (
     let index = 0;
     index < data.length;
     index += 4
   ) {
-    const r =
-      data[index];
+    const r = data[index];
+    const g = data[index + 1];
+    const b = data[index + 2];
 
-    const g =
-      data[index + 1];
-
-    const b =
-      data[index + 2];
+    const maxChannel = Math.max(r, g, b);
+    const minChannel = Math.min(r, g, b);
+    const chroma = maxChannel - minChannel;
 
     const luminance =
       r * 0.299 +
       g * 0.587 +
       b * 0.114;
 
-    const stretchedLuminance =
-      targetLow +
-      (
-        luminance -
-        sourceLow
-      ) /
-        sourceRange *
-        targetRange;
+    // Hindari mengubah area normal. Glare biasanya sangat terang
+    // dan cenderung putih/netral.
+    if (
+      luminance < 218 ||
+      maxChannel < 228 ||
+      chroma > 34
+    ) {
+      continue;
+    }
 
-    const adjustedLuminance =
-      clamp(
-        stretchedLuminance +
-        brightnessLift,
-        0,
-        255
-      );
-
-    /*
-     * Preserve warna:
-     * chroma tetap dipertahankan, hanya sedikit dinormalisasi.
-     */
-    const saturationFactor =
-      0.96;
-
-    const delta =
-      adjustedLuminance -
-      luminance;
-
-    const newR =
-      luminance +
-      (
-        r -
-        luminance
-      ) *
-        saturationFactor +
-      delta;
-
-    const newG =
-      luminance +
-      (
-        g -
-        luminance
-      ) *
-        saturationFactor +
-      delta;
-
-    const newB =
-      luminance +
-      (
-        b -
-        luminance
-      ) *
-        saturationFactor +
-      delta;
-
-    data[index] =
-      clamp(
-        Math.round(
-          newR
-        ),
-        0,
-        255
-      );
-
-    data[index + 1] =
-      clamp(
-        Math.round(
-          newG
-        ),
-        0,
-        255
-      );
-
-    data[index + 2] =
-      clamp(
-        Math.round(
-          newB
-        ),
-        0,
-        255
-      );
-  }
-}
-
-/**
- * Sharpen ringan memakai kernel:
- *
- *   0  -1   0
- *  -1   5  -1
- *   0  -1   0
- *
- * strength dicampur dengan gambar asli agar
- * tidak membuat teks/barcode oversharpen.
- */
-function applyLightSharpen(
-  canvas: HTMLCanvasElement,
-  strength: number
-): void {
-  const ctx =
-    canvas.getContext(
-      '2d',
-      {
-        willReadFrequently: true,
-      }
-    );
-
-  if (!ctx) {
-    return;
-  }
-
-  const width =
-    canvas.width;
-
-  const height =
-    canvas.height;
-
-  if (
-    width < 3 ||
-    height < 3
-  ) {
-    return;
-  }
-
-  const source =
-    ctx.getImageData(
-      0,
-      0,
-      width,
-      height
-    );
-
-  const output =
-    ctx.createImageData(
-      width,
-      height
-    );
-
-  const sourceData =
-    source.data;
-
-  const outputData =
-    output.data;
-
-  /*
-   * Copy border apa adanya.
-   */
-  outputData.set(
-    sourceData
-  );
-
-  const mix =
-    clamp(
-      strength,
+    const brightnessFactor = clamp(
+      (luminance - 218) / 37,
       0,
       1
     );
 
-  for (
-    let y = 1;
-    y < height - 1;
-    y += 1
+    const neutralFactor = clamp(
+      1 - chroma / 34,
+      0,
+      1
+    );
+
+    // Maksimum sekitar 34% supaya label putih asli tidak berubah abu-abu berat.
+    const strength =
+      brightnessFactor *
+      neutralFactor *
+      0.34;
+
+    if (strength <= 0) {
+      continue;
+    }
+
+    // Highlight compression. Target tetap terang agar hasil terlihat natural.
+    const targetLuminance =
+      218 +
+      Math.sqrt(
+        Math.max(
+          0,
+          luminance - 218
+        ) /
+          37
+      ) *
+        20;
+
+    const compressedLuminance =
+      luminance *
+        (1 - strength) +
+      targetLuminance *
+        strength;
+
+    const delta =
+      compressedLuminance -
+      luminance;
+
+    data[index] = clamp(
+      Math.round(r + delta),
+      0,
+      255
+    );
+
+    data[index + 1] = clamp(
+      Math.round(g + delta),
+      0,
+      255
+    );
+
+    data[index + 2] = clamp(
+      Math.round(b + delta),
+      0,
+      255
+    );
+  }
+}
+
+function enhanceBrightnessContrast(
+
+  data: Uint8ClampedArray,
+
+  stats: LuminanceStats
+
+): void {
+
+  const average =
+
+    stats.average;
+
+  let brightnessLift =
+
+    0;
+
+  if (
+
+    average < 70
+
   ) {
+
+    brightnessLift =
+
+      20;
+
+  } else if (
+
+    average < 95
+
+  ) {
+
+    brightnessLift =
+
+      14;
+
+  } else if (
+
+    average < 120
+
+  ) {
+
+    brightnessLift =
+
+      8;
+
+  } else if (
+
+    average < 145
+
+  ) {
+
+    brightnessLift =
+
+      4;
+
+  }
+
+  const sourceLow =
+
+    clamp(
+
+      stats.lowPercentile,
+
+      0,
+
+      80
+
+    );
+
+  const sourceHigh =
+
+    clamp(
+
+      stats.highPercentile,
+
+      150,
+
+      255
+
+    );
+
+  const sourceRange =
+
+    Math.max(
+
+      70,
+
+      sourceHigh -
+
+      sourceLow
+
+    );
+
+  /*
+
+   * Jangan stretch terlalu agresif.
+
+   * Target dibuat agar highlight tetap aman.
+
+   */
+
+  const targetLow =
+
+    16;
+
+  const targetHigh =
+
+    238;
+
+  const targetRange =
+
+    targetHigh -
+
+    targetLow;
+
+  for (
+
+    let index = 0;
+
+    index < data.length;
+
+    index += 4
+
+  ) {
+
+    const r =
+
+      data[index];
+
+    const g =
+
+      data[index + 1];
+
+    const b =
+
+      data[index + 2];
+
+    const luminance =
+
+      r * 0.299 +
+
+      g * 0.587 +
+
+      b * 0.114;
+
+    const stretchedLuminance =
+
+      targetLow +
+
+      (
+
+        luminance -
+
+        sourceLow
+
+      ) /
+
+        sourceRange *
+
+        targetRange;
+
+    const adjustedLuminance =
+
+      clamp(
+
+        stretchedLuminance +
+
+        brightnessLift,
+
+        0,
+
+        255
+
+      );
+
+    /*
+
+     * Preserve warna:
+
+     * chroma tetap dipertahankan, hanya sedikit dinormalisasi.
+
+     */
+
+    const saturationFactor =
+
+      0.96;
+
+    const delta =
+
+      adjustedLuminance -
+
+      luminance;
+
+    const newR =
+
+      luminance +
+
+      (
+
+        r -
+
+        luminance
+
+      ) *
+
+        saturationFactor +
+
+      delta;
+
+    const newG =
+
+      luminance +
+
+      (
+
+        g -
+
+        luminance
+
+      ) *
+
+        saturationFactor +
+
+      delta;
+
+    const newB =
+
+      luminance +
+
+      (
+
+        b -
+
+        luminance
+
+      ) *
+
+        saturationFactor +
+
+      delta;
+
+    data[index] =
+
+      clamp(
+
+        Math.round(
+
+          newR
+
+        ),
+
+        0,
+
+        255
+
+      );
+
+    data[index + 1] =
+
+      clamp(
+
+        Math.round(
+
+          newG
+
+        ),
+
+        0,
+
+        255
+
+      );
+
+    data[index + 2] =
+
+      clamp(
+
+        Math.round(
+
+          newB
+
+        ),
+
+        0,
+
+        255
+
+      );
+
+  }
+
+}
+
+/**
+
+ * Sharpen ringan memakai kernel:
+
+ *
+
+ *   0  -1   0
+
+ *  -1   5  -1
+
+ *   0  -1   0
+
+ *
+
+ * strength dicampur dengan gambar asli agar
+
+ * tidak membuat teks/barcode oversharpen.
+
+ */
+
+function measureCanvasSharpness(
+  canvas: HTMLCanvasElement
+): number {
+  const sourceCtx = canvas.getContext('2d', {
+    willReadFrequently: true,
+  });
+
+  if (!sourceCtx || canvas.width < 3 || canvas.height < 3) {
+    return 0;
+  }
+
+  const maxSide = 420;
+  const ratio = Math.min(
+    1,
+    maxSide / Math.max(canvas.width, canvas.height)
+  );
+
+  const width = Math.max(3, Math.round(canvas.width * ratio));
+  const height = Math.max(3, Math.round(canvas.height * ratio));
+
+  const analysisCanvas = document.createElement('canvas');
+  analysisCanvas.width = width;
+  analysisCanvas.height = height;
+
+  const ctx = analysisCanvas.getContext('2d', {
+    willReadFrequently: true,
+  });
+
+  if (!ctx) return 0;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(canvas, 0, 0, width, height);
+
+  const pixels = ctx.getImageData(0, 0, width, height);
+  const luminance = new Float32Array(width * height);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const pixelIndex = (y * width + x) * 4;
+      luminance[y * width + x] =
+        pixels.data[pixelIndex] * 0.299 +
+        pixels.data[pixelIndex + 1] * 0.587 +
+        pixels.data[pixelIndex + 2] * 0.114;
+    }
+  }
+
+  let sum = 0;
+  let sumSquared = 0;
+  let count = 0;
+
+  const startX = Math.max(1, Math.round(width * 0.05));
+  const endX = Math.min(width - 1, Math.round(width * 0.95));
+  const startY = Math.max(1, Math.round(height * 0.05));
+  const endY = Math.min(height - 1, Math.round(height * 0.95));
+
+  for (let y = startY; y < endY; y += 2) {
+    for (let x = startX; x < endX; x += 2) {
+      const index = y * width + x;
+
+      const laplacian =
+        -4 * luminance[index] +
+        luminance[index - 1] +
+        luminance[index + 1] +
+        luminance[index - width] +
+        luminance[index + width];
+
+      sum += laplacian;
+      sumSquared += laplacian * laplacian;
+      count += 1;
+    }
+  }
+
+  if (count === 0) return 0;
+
+  const mean = sum / count;
+  const variance = Math.max(
+    0,
+    sumSquared / count - mean * mean
+  );
+
+  return Math.min(100, variance / 15);
+}
+
+function applyLightSharpen(
+
+  canvas: HTMLCanvasElement,
+
+  strength: number
+
+): void {
+
+  const ctx =
+
+    canvas.getContext(
+
+      '2d',
+
+      {
+
+        willReadFrequently: true,
+
+      }
+
+    );
+
+  if (!ctx) {
+
+    return;
+
+  }
+
+  const width =
+
+    canvas.width;
+
+  const height =
+
+    canvas.height;
+
+  if (
+
+    width < 3 ||
+
+    height < 3
+
+  ) {
+
+    return;
+
+  }
+
+  const source =
+
+    ctx.getImageData(
+
+      0,
+
+      0,
+
+      width,
+
+      height
+
+    );
+
+  const output =
+
+    ctx.createImageData(
+
+      width,
+
+      height
+
+    );
+
+  const sourceData =
+
+    source.data;
+
+  const outputData =
+
+    output.data;
+
+  /*
+
+   * Copy border apa adanya.
+
+   */
+
+  outputData.set(
+
+    sourceData
+
+  );
+
+  const mix =
+
+    clamp(
+
+      strength,
+
+      0,
+
+      1
+
+    );
+
+  for (
+
+    let y = 1;
+
+    y < height - 1;
+
+    y += 1
+
+  ) {
+
     for (
+
       let x = 1;
+
       x < width - 1;
+
       x += 1
+
     ) {
+
       const centerIndex =
+
         (
+
           y *
+
           width +
+
           x
+
         ) *
+
         4;
 
       const leftIndex =
+
         centerIndex - 4;
 
       const rightIndex =
+
         centerIndex + 4;
 
       const topIndex =
+
         (
+
           (
+
             y - 1
+
           ) *
+
           width +
+
           x
+
         ) *
+
         4;
 
       const bottomIndex =
+
         (
+
           (
+
             y + 1
+
           ) *
+
           width +
+
           x
+
         ) *
+
         4;
 
       for (
+
         let channel = 0;
+
         channel < 3;
+
         channel += 1
+
       ) {
+
         const original =
+
           sourceData[
+
             centerIndex +
+
             channel
+
           ];
 
         const sharpened =
+
           original * 5 -
+
           sourceData[
+
             leftIndex +
+
             channel
+
           ] -
+
           sourceData[
+
             rightIndex +
+
             channel
+
           ] -
+
           sourceData[
+
             topIndex +
+
             channel
+
           ] -
+
           sourceData[
+
             bottomIndex +
+
             channel
+
           ];
 
         const mixed =
+
           original *
+
             (
+
               1 -
+
               mix
+
             ) +
+
           sharpened *
+
             mix;
 
         outputData[
+
           centerIndex +
+
           channel
+
         ] =
+
           clamp(
+
             Math.round(
+
               mixed
+
             ),
+
             0,
+
             255
+
           );
+
       }
 
       outputData[
+
         centerIndex + 3
+
       ] =
+
         sourceData[
+
           centerIndex + 3
+
         ];
+
     }
+
   }
 
   ctx.putImageData(
+
     output,
+
     0,
+
     0
+
   );
+
 }
 
 /**
+
  * Auto-detect sederhana tanpa OpenCV.
+
  *
+
  * Hanya sebagai initial guess.
+
  * User tetap bisa geser 4 corner secara manual.
+
  */
+
 export async function detectDocumentCorners(
+
   imageData: string,
+
   options: AutoDetectOptions = {}
+
 ): Promise<CornerPoints> {
+
   const {
+
     sampleSize = 420,
+
     edgeThreshold = 42,
+
     padding = 0.025,
+
   } = options;
 
   try {
+
     const image =
+
       await loadImageFromDataUrl(
+
         imageData
+
       );
 
     const sourceWidth =
+
       image.naturalWidth ||
+
       image.width;
 
     const sourceHeight =
+
       image.naturalHeight ||
+
       image.height;
 
     if (
+
       sourceWidth <= 0 ||
+
       sourceHeight <= 0
+
     ) {
+
       return getDefaultCorners();
+
     }
 
     const ratio =
+
       Math.min(
+
         1,
+
         sampleSize /
+
           Math.max(
+
             sourceWidth,
+
             sourceHeight
+
           )
+
       );
 
     const width =
+
       Math.max(
+
         40,
+
         Math.round(
+
           sourceWidth *
+
           ratio
+
         )
+
       );
 
     const height =
+
       Math.max(
+
         40,
+
         Math.round(
+
           sourceHeight *
+
           ratio
+
         )
+
       );
 
     const canvas =
+
       document.createElement(
+
         'canvas'
+
       );
 
     canvas.width =
+
       width;
 
     canvas.height =
+
       height;
 
     const ctx =
+
       canvas.getContext(
+
         '2d',
+
         {
+
           willReadFrequently: true,
+
         }
+
       );
 
     if (!ctx) {
+
       return getDefaultCorners();
+
     }
 
     ctx.drawImage(
+
       image,
+
       0,
+
       0,
+
       width,
+
       height
+
     );
 
     const pixels =
+
       ctx.getImageData(
+
         0,
+
         0,
+
         width,
+
         height
+
       );
 
     const grayscale =
+
       new Float32Array(
+
         width *
+
         height
+
       );
 
     for (
+
       let y = 0;
+
       y < height;
+
       y += 1
+
     ) {
+
       for (
+
         let x = 0;
+
         x < width;
+
         x += 1
+
       ) {
+
         const index =
+
           (
+
             y *
+
             width +
+
             x
+
           ) *
+
             4;
 
         grayscale[
+
           y *
+
             width +
+
           x
+
         ] =
+
           pixels.data[index] *
+
             0.299 +
+
           pixels.data[
+
             index + 1
+
           ] *
+
             0.587 +
+
           pixels.data[
+
             index + 2
+
           ] *
+
             0.114;
+
       }
+
     }
 
     let minX =
+
       width;
 
     let minY =
+
       height;
 
     let maxX =
+
       0;
 
     let maxY =
+
       0;
 
     let edgeCount =
+
       0;
 
     for (
+
       let y = 1;
+
       y < height - 1;
+
       y += 1
+
     ) {
+
       for (
+
         let x = 1;
+
         x < width - 1;
+
         x += 1
+
       ) {
+
         const current =
+
           y *
+
             width +
+
           x;
 
         const gx =
+
           Math.abs(
+
             grayscale[
+
               current + 1
+
             ] -
+
             grayscale[
+
               current - 1
+
             ]
+
           );
 
         const gy =
+
           Math.abs(
+
             grayscale[
+
               current + width
+
             ] -
+
             grayscale[
+
               current - width
+
             ]
+
           );
 
         const magnitude =
+
           gx +
+
           gy;
 
         if (
+
           magnitude >=
+
           edgeThreshold
+
         ) {
+
           minX =
+
             Math.min(
+
               minX,
+
               x
+
             );
 
           minY =
+
             Math.min(
+
               minY,
+
               y
+
             );
 
           maxX =
+
             Math.max(
+
               maxX,
+
               x
+
             );
 
           maxY =
+
             Math.max(
+
               maxY,
+
               y
+
             );
 
           edgeCount +=
+
             1;
+
         }
+
       }
+
     }
 
     const minimumEdges =
+
       width *
+
       height *
+
       0.003;
 
     if (
+
       edgeCount <
+
         minimumEdges ||
+
       maxX <= minX ||
+
       maxY <= minY
+
     ) {
+
       return getDefaultCorners();
+
     }
 
     const detectedWidth =
+
       maxX -
+
       minX;
 
     const detectedHeight =
+
       maxY -
+
       minY;
 
     if (
+
       detectedWidth <
+
         width * 0.25 ||
+
       detectedHeight <
+
         height * 0.25
+
     ) {
+
       return getDefaultCorners();
+
     }
 
     const normalizedPadding =
+
       clamp(
+
         padding,
+
         0,
+
         0.1
+
       );
 
     const left =
+
       clamp(
+
         minX / width -
+
           normalizedPadding,
+
         0.02,
+
         0.95
+
       );
 
     const top =
+
       clamp(
+
         minY / height -
+
           normalizedPadding,
+
         0.02,
+
         0.95
+
       );
 
     const right =
+
       clamp(
+
         maxX / width +
+
           normalizedPadding,
+
         0.05,
+
         0.98
+
       );
 
     const bottom =
+
       clamp(
+
         maxY / height +
+
           normalizedPadding,
+
         0.05,
+
         0.98
+
       );
 
     const detected: CornerPoints = {
+
       topLeft: {
+
         x: left,
+
         y: top,
+
       },
 
       topRight: {
+
         x: right,
+
         y: top,
+
       },
 
       bottomRight: {
+
         x: right,
+
         y: bottom,
+
       },
 
       bottomLeft: {
+
         x: left,
+
         y: bottom,
+
       },
+
     };
 
     if (
+
       !isValidCornerLayout(
+
         detected
+
       )
+
     ) {
+
       return getDefaultCorners();
+
     }
 
     return detected;
+
   } catch (error) {
+
     console.warn(
+
       'Auto document detection gagal, menggunakan corner default:',
+
       error
+
     );
 
     return getDefaultCorners();
+
   }
+
 }
 
 /**
+
  * Label filter untuk UI.
+
  */
+
 export function getScanFilterLabel(
+
   filter: ScanFilter
+
 ): string {
+
   switch (filter) {
+
     case 'enhance':
+
       return 'Enhance';
 
     default:
+
       return 'Original';
+
   }
+
 }
