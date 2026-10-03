@@ -39,7 +39,6 @@ export async function addClassicWatermark(
         canvas.height
       );
 
-      // Sedikit lebih kecil dari versi sebelumnya (0.024)
       const fontSize = Math.max(
         14,
         Math.round(referenceSize * 0.0205)
@@ -128,7 +127,6 @@ export async function addClassicWatermark(
             0.95
           )
         );
-
         return;
       }
 
@@ -137,19 +135,42 @@ export async function addClassicWatermark(
       // =====================================================
       ctx.save();
 
+      // Putih tetap dipertahankan agar gaya Classic tetap bersih.
       ctx.fillStyle = '#FFFFFF';
 
+      /*
+       * Semibold (600) membuat tulisan lebih jelas daripada
+       * versi Regular (400), tetapi tidak terlalu tebal.
+       */
       ctx.font =
-        `400 ${fontSize}px Arial, Helvetica, sans-serif`;
+        `600 ${fontSize}px Arial, Helvetica, sans-serif`;
 
       ctx.textAlign = 'right';
       ctx.textBaseline = 'alphabetic';
 
-      // Tetap tanpa shadow / background / ikon.
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
+      /*
+       * Shadow gelap tipis membantu watermark tetap terbaca
+       * pada kertas putih, langit terang, plastik, tembok putih,
+       * maupun area foto dengan highlight tinggi.
+       *
+       * Tidak memakai background box agar watermark tetap natural.
+       */
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+
+      ctx.shadowBlur = Math.max(
+        2,
+        Math.round(fontSize * 0.12)
+      );
+
+      ctx.shadowOffsetX = Math.max(
+        1,
+        Math.round(fontSize * 0.035)
+      );
+
+      ctx.shadowOffsetY = Math.max(
+        1,
+        Math.round(fontSize * 0.035)
+      );
 
       /*
        * Karena watermark berada di kanan bawah,
@@ -253,12 +274,14 @@ function wrapText(
   maxWidth: number,
   fontSize: number
 ): string[] {
-  // Pastikan font sudah sama dengan font watermark
-  // sebelum melakukan pengukuran.
   ctx.save();
 
+  /*
+   * Harus sama dengan font saat watermark digambar.
+   * Dengan begitu hasil pengukuran wrapping tetap akurat.
+   */
   ctx.font =
-    `400 ${fontSize}px Arial, Helvetica, sans-serif`;
+    `600 ${fontSize}px Arial, Helvetica, sans-serif`;
 
   const paragraphs = text
     .split(/\r?\n/)
