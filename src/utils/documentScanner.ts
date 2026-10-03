@@ -1493,14 +1493,6 @@ function applyEnhancePipeline(
 
     imageData.data;
 
-  const stats =
-
-    analyzeLuminance(
-
-      data
-
-    );
-
   /*
    * Kurangi pantulan putih dari plastik secara konservatif.
    * Ini hanya menekan highlight yang sangat terang dan netral;
